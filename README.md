@@ -131,3 +131,10 @@ Implemented:
   `SystemInfo.hasBatteryPermission` accordingly.
 - Plugins are *compiled in*; there is no runtime plugin install path by
   design.
+### Verification status (device I2405, API 36) — INTERACTION MILESTONE
+Verified live on the physical device (logcat + window dump):
+- Sprite renderer loads **14 animations / 25 frames** (classic Shimeji w/ legs: walk, sit, dangle-legs, lie, look-up, jump, bounce, poke, trip, climb, fall, drag, magic-cast).
+- **Tap the mascot**: jumps/bounces/pokes (state log: `falling -> jump -> idle`).
+- **Idle variety**: autonomously sits, dangles legs, looks up, lies down (weighted-random FSM).
+- **Drag & throw**: pick up, fling; falls with physics bounce; hard slams trip the mascot.
+- Autonomy loop (walk ↔ idle) runs on cooldowns; FSM waiting/guards verified by 36 core tests.

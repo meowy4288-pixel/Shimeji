@@ -95,3 +95,11 @@ serialization 1.6.2.
    constraint and hurts Play policy/ease-of-use; overlay already draws over
    other apps).
 4. Multi-mascot? Edge-grab/cling behaviors? Sprite-sheet vs strip loading?
+## Milestone — Interaction + Animation (2024-09-09-ish, device I2405/API36)
+- **New pose states (14 animations / 25 frames total)**: sit(`shime11`), dangle-legs(`shime31,33`), lie(`shime21`), look_up(`shime26`), jump(`shime22`), bounce(`shime18,19`), poke(`shime5,6`), trip(`shime20,19`); frames copied from `linux-shimeji/img/`, RCA via `poses.json`.
+- **Tap-to-interact**: `MascotView.poke()` → weighted random jump/bounce/poke via `fsm.forceState`, gated by `canAcceptVisualCommand(COSMETIC_FEEDBACK)` (drag blocks it). Service differentiates tap (<400ms, no drag) from drag in ACTION_UP.
+- **Idle variety (weighted random chains)**: idle → sit/dangle/lie/look_up (GROUNDED guards), sit → dangle/look_up; rebalanced walking=0.6/sit=0.7/look_up=0.6/dangle=0.5/lie=0.35, idle dwell cooldown 4000ms.
+- **Hard-landing trip**: peak fall speed >= 1400 px/s → forceState("trip"), only when cosmetic-acceptable (physics already bounces normal landings).
+- **Bug fixed**: animation phase now resets to 0 when FSM state changes — non-looping reactions (jump/poke/trip/magic_cast) previously showed their LAST frame immediately due to cumulative `animPhaseMs`.
+- **Verified on device (logcat)**: `poke -> jump (accepted=true)`, `falling -> jump`, `jump -> idle`; look_up ×3 autonomously; walking↔idle at ~2.5–4s cadence; user drags → `dragging`/`falling` cycles; 36/36 core tests PASS; BUILD SUCCESSFUL.
+- **Gotchas added**: (1) THIS OEM STRIPS `Log.d` in logcat — use `Log.i` for verification logs; (2) "Start mascot" button coords vary between dumps (351,1194 and 227,992 observed) — always re-query via uiautomator, don't hardcode; (3) logcat main buffer rolls fast on this device (OEM spam) — sample periodically or clear-then-capture; (4) synthetic `input tap` must target the CURRENT overlay frame (mascot walks); parse `dumpsys window windows` for `type=2038` frame each time.

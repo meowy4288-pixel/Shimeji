@@ -75,6 +75,7 @@ class ShimejiOverlayService : Service() {
         const val ACTION_RESUME = "dev.delpa.shimeji.overlay.action.RESUME"
         const val ACTION_STOP = "dev.delpa.shimeji.overlay.action.STOP"
         private const val TAG = "ShimejiOverlay"
+        private const val TAP_MAX_MS = 400L
 
         /** Explicit intent used by MainActivity and notification actions. */
         fun intent(context: Context) = Intent(context, ShimejiOverlayService::class.java)
@@ -94,6 +95,7 @@ class ShimejiOverlayService : Service() {
     // Touch state
     private var downRawX = 0f
     private var downRawY = 0f
+    private var downEventTime = 0L
     private var startStateX = 0f
     private var startStateY = 0f
     private var lastMoveRawX = 0f
@@ -417,6 +419,7 @@ class ShimejiOverlayService : Service() {
             MotionEvent.ACTION_DOWN -> {
                 downRawX = event.rawX
                 downRawY = event.rawY
+                downEventTime = event.eventTime
                 startStateX = view.state.x
                 startStateY = view.state.y
                 lastMoveRawX = event.rawX
@@ -455,6 +458,9 @@ class ShimejiOverlayService : Service() {
                 if (dragging) {
                     view.physics.releaseFromDrag(view.state, pendingVx, pendingVy)
                     view.fsm.onEvent(FsmEvent.DRAG_ENDED, System.currentTimeMillis())
+                } else if (event.eventTime - downEventTime < TAP_MAX_MS) {
+                    // Quick tap (no drag): social reaction animation.
+                    view.poke(System.currentTimeMillis())
                 }
                 dragging = false
                 return true
@@ -590,10 +596,47 @@ interface ShimejiAppHost {
 private val DEFAULT_FSM_JSON = """
 {"initial":"idle","fallbackState":"idle","gravity":1500,"maxFallSpeed":900,
  "states":[
-   {"id":"idle","animation":"idle","frameDurationMs":400,"frames":["idle-a","idle-b"],"looping":true},
-   {"id":"walking","animation":"walk","frameDurationMs":160,"frames":["walk-a","walk-b"],"looping":true},
-   {"id":"falling","animation":"fall","frameDurationMs":120,"frames":["fall"],"looping":true},
-   {"id":"dragging","animation":"drag","frameDurationMs":120,"frames":["drag-a","drag-b"],"looping":true},
-   {"id":"tool_feedback","animation":"magic_cast","frameDurationMs":90,"frames":["cast-a","cast-b","cast-c"],"looping":false,"durationMs":600}
+   {"id":"idle","animation":"idle","frameDurationMs":400,"frames":["idle-a","idle-b"],"looping":true,
+    "transitions":[
+      {"to":"walking","guard":"RANDOM_ANYTIME","cooldownMs":4000,"weight":0.6},
+      {"to":"sit","guard":"GROUNDED","cooldownMs":5000,"weight":0.7},
+      {"to":"dangle","guard":"GROUNDED","cooldownMs":8000,"weight":0.5},
+      {"to":"lie","guard":"GROUNDED","cooldownMs":14000,"weight":0.35},
+      {"to":"look_up","guard":"GROUNDED","cooldownMs":4000,"weight":0.6},
+      {"to":"falling","guard":"AIRBORNE","cooldownMs":0,"weight":1.0}]},
+   {"id":"walking","animation":"walk","frameDurationMs":160,"frames":["walk-a","walk-b"],"looping":true,
+    "transitions":[
+      {"to":"idle","guard":"RANDOM_ANYTIME","cooldownMs":3000,"weight":1.0},
+      {"to":"climbing","guard":"NEAR_LEFT_CLIMB","cooldownMs":0,"weight":1.0},
+      {"to":"climbing","guard":"NEAR_RIGHT_CLIMB","cooldownMs":0,"weight":1.0},
+      {"to":"falling","guard":"AIRBORNE","cooldownMs":0,"weight":1.0}]},
+   {"id":"falling","animation":"fall","frameDurationMs":120,"frames":["fall"],"looping":true,
+    "transitions":[{"to":"idle","guard":"GROUNDED","cooldownMs":150,"weight":1.0}]},
+   {"id":"climbing","animation":"climb","frameDurationMs":200,"frames":["climb-a","climb-b"],"looping":true,"durationMs":900,
+    "transitions":[
+      {"to":"falling","guard":"RANDOM_ANYTIME","cooldownMs":800,"weight":1.0},
+      {"to":"idle","guard":"RANDOM_ANYTIME","cooldownMs":1200,"weight":0.4}]},
+   {"id":"dragging","animation":"drag","frameDurationMs":120,"frames":["drag-a","drag-b"],"looping":true,"transitions":[]},
+   {"id":"tool_feedback","animation":"magic_cast","frameDurationMs":90,"frames":["cast-a","cast-b","cast-c"],"looping":false,"durationMs":600,
+    "transitions":[{"to":"idle","guard":"RANDOM_ANYTIME","cooldownMs":0,"weight":1.0}]},
+   {"id":"sit","animation":"sit","frameDurationMs":300,"frames":["sit"],"looping":true,
+    "transitions":[
+      {"to":"idle","guard":"GROUNDED","cooldownMs":2500,"weight":1.0},
+      {"to":"dangle","guard":"GROUNDED","cooldownMs":3500,"weight":0.6},
+      {"to":"look_up","guard":"GROUNDED","cooldownMs":3500,"weight":0.4}]},
+   {"id":"dangle","animation":"dangle","frameDurationMs":220,"frames":["dangle-a","dangle-b"],"looping":true,
+    "transitions":[{"to":"idle","guard":"GROUNDED","cooldownMs":3000,"weight":1.0}]},
+   {"id":"lie","animation":"lie","frameDurationMs":400,"frames":["lie"],"looping":true,
+    "transitions":[{"to":"idle","guard":"GROUNDED","cooldownMs":4500,"weight":1.0}]},
+   {"id":"look_up","animation":"look_up","frameDurationMs":300,"frames":["look-a","look-b"],"looping":true,
+    "transitions":[{"to":"idle","guard":"GROUNDED","cooldownMs":1800,"weight":1.0}]},
+   {"id":"poke","animation":"poke","frameDurationMs":110,"frames":["poke-a","poke-b"],"looping":false,"durationMs":550,
+    "transitions":[{"to":"idle","guard":"RANDOM_ANYTIME","cooldownMs":350,"weight":1.0}]},
+   {"id":"jump","animation":"jump","frameDurationMs":130,"frames":["jump"],"looping":false,"durationMs":500,
+    "transitions":[{"to":"idle","guard":"RANDOM_ANYTIME","cooldownMs":300,"weight":1.0}]},
+   {"id":"bounce","animation":"bounce","frameDurationMs":120,"frames":["bounce-a","bounce-b"],"looping":false,"durationMs":480,
+    "transitions":[{"to":"idle","guard":"RANDOM_ANYTIME","cooldownMs":300,"weight":1.0}]},
+   {"id":"trip","animation":"trip","frameDurationMs":130,"frames":["trip-a","trip-b"],"looping":false,"durationMs":650,
+    "transitions":[{"to":"idle","guard":"RANDOM_ANYTIME","cooldownMs":400,"weight":1.0}]}
  ]}
 """.trimIndent()

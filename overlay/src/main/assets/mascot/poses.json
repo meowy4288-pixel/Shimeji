@@ -1,9 +1,23 @@
 {
-  "comment": "Pose map for the bundled Classic Shimeji character (Yuki Yamada original, 128x128 RGBA frames). Frame numbers match the original Actions.xml pose table.",
+  "comment": "Pose map for the bundled Classic Shimeji character (Yuki Yamada original, 128x128 RGBA frames). Frame numbers match the original Actions.xml pose table: walk feet alternate, dangle legs while sitting, picked/drag pose, etc.",
   "animations": {
     "idle": [
       { "file": "shime1.png" },
       { "file": "shime1.png" }
+    ],
+    "sit": [
+      { "file": "shime11.png" }
+    ],
+    "dangle": [
+      { "file": "shime31.png" },
+      { "file": "shime33.png" }
+    ],
+    "lie": [
+      { "file": "shime21.png" }
+    ],
+    "look_up": [
+      { "file": "shime26.png" },
+      { "file": "shime26.png" }
     ],
     "walk": [
       { "file": "shime2.png" },
@@ -24,6 +38,21 @@
       { "file": "shime5.png" },
       { "file": "shime6.png" },
       { "file": "shime1.png" }
+    ],
+    "poke": [
+      { "file": "shime5.png" },
+      { "file": "shime6.png" }
+    ],
+    "jump": [
+      { "file": "shime22.png" }
+    ],
+    "bounce": [
+      { "file": "shime18.png" },
+      { "file": "shime19.png" }
+    ],
+    "trip": [
+      { "file": "shime20.png" },
+      { "file": "shime19.png" }
     ]
   }
 }

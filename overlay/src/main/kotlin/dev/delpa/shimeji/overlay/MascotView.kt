@@ -2,9 +2,11 @@ package dev.delpa.shimeji.overlay
 
 import android.content.Context
 import android.graphics.Canvas
+import android.util.Log
 import android.view.View
 import dev.delpa.shimeji.core.fsm.FsmConfig
 import dev.delpa.shimeji.core.fsm.FsmEvent
+import dev.delpa.shimeji.core.fsm.InterruptPriority
 import dev.delpa.shimeji.core.fsm.ShimejiFSM
 import dev.delpa.shimeji.core.physics.PhysicsBounds
 import dev.delpa.shimeji.core.physics.PhysicsEngine
@@ -19,8 +21,15 @@ class MascotView(
     fsmConfig: FsmConfig,
     private val renderer: MascotRenderer,
     internal val physics: PhysicsEngine,
-    random: kotlin.random.Random = kotlin.random.Random,
+    private val random: kotlin.random.Random = kotlin.random.Random,
 ) : View(context) {
+
+    companion object {
+        private const val TAG = "MascotView"
+
+        /** Downward fall speed beyond which a fling landing trips the mascot. */
+        private const val TRIP_IMPACT_VY = 1400f
+    }
 
     val fsm: ShimejiFSM = ShimejiFSM(fsmConfig, random)
     val state: PhysicsState = PhysicsState(x = 0f, y = 0f)
@@ -30,10 +39,29 @@ class MascotView(
     private var lastAnimAdvanceMs = 0L
     private var completionFired = false
     private var fsmStepAccum = 0f
+    private var lastStateId: String? = null
+    private var lastGrounded = true
+    private var peakFallVy = 0f
+
+    /**
+     * Tap interaction: pick a short reaction animation. Returns false when a
+     * higher-priority visual (drag, tool feedback) is active.
+     */
+    fun poke(nowMs: Long): Boolean {
+        if (!fsm.canAcceptVisualCommand(InterruptPriority.COSMETIC_FEEDBACK)) return false
+        val reactions = listOf("jump", "bounce", "poke")
+        val picked = reactions[random.nextInt(reactions.size)]
+        val accepted = fsm.forceState(picked, nowMs)
+        Log.i(TAG, "poke -> $picked (accepted=$accepted)")
+        return accepted
+    }
 
     /** Call per frame from the service driver. dtMs is a bounded, monotonic delta. */
     fun update(dtMs: Float, nowAnimMs: Long) {
         val b = bounds ?: return
+        val wasGrounded = lastGrounded
+        if (!state.grounded) peakFallVy = maxOf(peakFallVy, state.vy)
+
         physics.step(state, b, dtMs / 1000f)
         physics.rest(state, b)
 
@@ -42,6 +70,29 @@ class MascotView(
         if (fsmStepAccum >= 300f) {
             fsmStepAccum = 0f
             fsm.onStep(nowAnimMs, state.grounded, state.hangingLeft, state.hangingRight)
+        }
+
+        // Reset animation phase whenever the FSM state changes so non-looping
+        // reactions (jump/poke/trip/magic_cast) play from their first frame.
+        val st = fsm.currentState
+        if (st.id != lastStateId) {
+            Log.i(TAG, "state: ${lastStateId ?: "-"} -> ${st.id}")
+            lastStateId = st.id
+            animPhaseMs = 0L
+            completionFired = false
+        }
+
+        // Hard landing: a very fast fling into the floor trips the mascot.
+        if (!wasGrounded && state.grounded) {
+            if (peakFallVy >= TRIP_IMPACT_VY &&
+                fsm.canAcceptVisualCommand(InterruptPriority.COSMETIC_FEEDBACK)
+            ) {
+                fsm.forceState("trip", nowAnimMs)
+            }
+            peakFallVy = 0f
+            lastGrounded = true
+        } else {
+            lastGrounded = state.grounded
         }
 
         // Autonomous wander while grounded and walking.

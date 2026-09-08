@@ -162,4 +162,58 @@ class ShimejiFSMTest {
         val fsm = ShimejiFSM(cfg, Random(1))
         assertNotNull(fsm.currentState)
     }
+    private fun socialConfig(): FsmConfig {
+        val states = listOf(
+            FsmState("idle", "idle", frames = listOf("a", "b"), looping = true, transitions = listOf(
+                FsmTransition("walking", GuardName.RANDOM_ANYTIME, cooldownMs = 2000, weight = 1.0),
+                FsmTransition("sit", GuardName.GROUNDED, cooldownMs = 3000, weight = 0.5),
+                FsmTransition("falling", GuardName.AIRBORNE, cooldownMs = 0, weight = 1.0),
+            )),
+            FsmState("walking", "walk", frames = listOf("a", "b"), looping = true),
+            FsmState("falling", "fall", frames = listOf("f"), looping = true),
+            FsmState("dragging", "drag", frames = listOf("a"), looping = true),
+            FsmState("sit", "sit", frames = listOf("s"), looping = true, transitions = listOf(
+                FsmTransition("idle", GuardName.GROUNDED, cooldownMs = 2000, weight = 1.0),
+            )),
+            FsmState("jump", "jump", frames = listOf("j"), looping = false, durationMs = 500, transitions = listOf(
+                FsmTransition("idle", GuardName.RANDOM_ANYTIME, cooldownMs = 300, weight = 1.0),
+            )),
+            FsmState("bounce", "bounce", frames = listOf("b1", "b2"), looping = false, durationMs = 400),
+        )
+        return FsmConfig(states = states, initial = "idle", fallbackState = "idle")
+    }
+
+    @Test
+    fun `idle variety guarded by grounded`() {
+        val fsm = ShimejiFSM(socialConfig(), Random(1))
+        // Grounded: sit is eligible together with walking.
+        val grounded = fsm.eligibleTransitions(nowMs = 4000, grounded = true)
+        assertEquals(setOf("walking", "sit"), grounded.map { it.to }.toSet())
+        fsm.onStep(nowMs = 4000, grounded = true)
+        assertTrue(fsm.currentState.id in setOf("walking", "sit"), "idle should wander or sit when grounded")
+        // Airborne from a fresh idle: only falling is eligible (walking still
+        // cooling down, sit requires grounded).
+        val air = ShimejiFSM(socialConfig(), Random(1))
+        air.onStep(nowMs = 0, grounded = false)
+        assertEquals("falling", air.currentState.id)
+    }
+
+    @Test
+    fun `reaction force and completion return to autonomous`() {
+        val fsm = ShimejiFSM(socialConfig(), Random(1))
+        assertTrue(fsm.forceState("jump", 10))
+        assertEquals("jump", fsm.currentState.id)
+        fsm.onEvent(FsmEvent.ANIMATION_COMPLETED, 600)
+        assertEquals("idle", fsm.currentState.id)
+    }
+
+    @Test
+    fun `reactions respect drag interruption`() {
+        val fsm = ShimejiFSM(socialConfig(), Random(1))
+        fsm.onEvent(FsmEvent.DRAG_STARTED, 0)
+        assertEquals("dragging", fsm.currentState.id)
+        assertFalse(fsm.forceState("jump", 100), "drag must block reaction forces")
+        assertEquals("dragging", fsm.currentState.id)
+    }
+
 }
