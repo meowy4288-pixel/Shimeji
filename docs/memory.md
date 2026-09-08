@@ -95,6 +95,23 @@ serialization 1.6.2.
    constraint and hurts Play policy/ease-of-use; overlay already draws over
    other apps).
 4. Multi-mascot? Edge-grab/cling behaviors? Sprite-sheet vs strip loading?
+5. Tap-facing toggle + tool_thinking state (research-mascot-apps.md adopt list) — small, do with
+   the next review-fix pass if user wants.
+## Research — Mascot-app comparison (docs/research-mascot-apps.md)
+- Surveyed via GitHub API (stars-sorted) + shallow clones: arkpets-lite (Android/Spine WebView
+  overlay, weighted-random FSM slots I/S/L/ML/MR/P, jsbridge window walk, config toggles,
+  AI-activation dial), uDesktopMascot (Unity desktop, VRM/GLB/FBX + voice/BGM), MobileGoose (iOS,
+  per-frame mod hook, throw-on-drag), floating-pet (Flutter tamagotchi overlay, stats decay),
+  PetDesk (Kotlin overlay + NanoHTTPD on localhost:8765 mirroring Claude Code state).
+- VERDICT: we're ahead on physics (only Android sample with gravity/fall/bounce/throw), testable
+  pure-JVM core, permission-aware tool harness, FGS compliance, zero network permission.
+- ADOPT candidates (ranked): (1) tap toggles facing direction (arkpets behavior_direction_switching,
+  cheap/fun); (2) distinct tool_thinking animation while model computes (PetDesk lifecycle idea,
+  we already get ToolCallAccepted pre-PlayAnimation); (3) expose behavior toggles + AI-activation
+  dial from UI; (4) sound on click (deferred, needs asset); (5) multiple compiled-in characters (backlog).
+- NOT copying: WebView-rendered pets (no testability), per-frame mod hooks, Unity 3D, localhost HTTP
+  control API (violates no-network stance), care/tamagotchi gameplay (genre mismatch).
+
 ## Milestone — Interaction + Animation (2024-09-09-ish, device I2405/API36)
 - **New pose states (14 animations / 25 frames total)**: sit(`shime11`), dangle-legs(`shime31,33`), lie(`shime21`), look_up(`shime26`), jump(`shime22`), bounce(`shime18,19`), poke(`shime5,6`), trip(`shime20,19`); frames copied from `linux-shimeji/img/`, RCA via `poses.json`.
 - **Tap-to-interact**: `MascotView.poke()` → weighted random jump/bounce/poke via `fsm.forceState`, gated by `canAcceptVisualCommand(COSMETIC_FEEDBACK)` (drag blocks it). Service differentiates tap (<400ms, no drag) from drag in ACTION_UP.
