@@ -1,0 +1,29 @@
+{
+  "comment": "Pose map for the bundled Classic Shimeji character (Yuki Yamada original, 128x128 RGBA frames). Frame numbers match the original Actions.xml pose table.",
+  "animations": {
+    "idle": [
+      { "file": "shime1.png" },
+      { "file": "shime1.png" }
+    ],
+    "walk": [
+      { "file": "shime2.png" },
+      { "file": "shime3.png" }
+    ],
+    "fall": [
+      { "file": "shime4.png" }
+    ],
+    "climb": [
+      { "file": "shime14.png" },
+      { "file": "shime13.png" }
+    ],
+    "drag": [
+      { "file": "shime9.png" },
+      { "file": "shime7.png" }
+    ],
+    "magic_cast": [
+      { "file": "shime5.png" },
+      { "file": "shime6.png" },
+      { "file": "shime1.png" }
+    ]
+  }
+}

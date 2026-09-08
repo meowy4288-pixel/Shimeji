@@ -17,7 +17,7 @@ import dev.delpa.shimeji.core.physics.PhysicsState
 class MascotView(
     context: Context,
     fsmConfig: FsmConfig,
-    private val renderer: ProceduralMascotRenderer,
+    private val renderer: MascotRenderer,
     internal val physics: PhysicsEngine,
     random: kotlin.random.Random = kotlin.random.Random,
 ) : View(context) {

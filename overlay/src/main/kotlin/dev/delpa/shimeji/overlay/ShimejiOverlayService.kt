@@ -219,10 +219,11 @@ class ShimejiOverlayService : Service() {
         val engineHost = engine ?: return
 
         val fsmConfig = loadFsmConfig()
+        val renderer = loadMascotRenderer()
         val view = MascotView(
             context = this,
             fsmConfig = fsmConfig,
-            renderer = ProceduralMascotRenderer(),
+            renderer = renderer,
             physics = PhysicsEngine(),
         )
         mascotView = view
@@ -267,6 +268,20 @@ class ShimejiOverlayService : Service() {
         this.scope = scope
         frameJob = scope.launch { frameLoop() }
         collectorJob = scope.launch { collectVisualEvents(engineHost) }
+    }
+
+    /**
+     * Renderer selection: bundled sprite character when its assets load,
+     * otherwise zero-asset procedural fallback. Chosen once at attach time.
+     */
+    private fun loadMascotRenderer(): MascotRenderer {
+        val sprite = SpriteMascotRenderer.load(this)
+        if (sprite != null) {
+            android.util.Log.i(TAG, "using SpriteMascotRenderer (bundled classic Shimeji)")
+            return sprite
+        }
+        android.util.Log.w(TAG, "sprite mascot unavailable; using procedural fallback")
+        return ProceduralMascotRenderer()
     }
 
     private fun loadFsmConfig(): FsmConfig {
@@ -536,11 +551,15 @@ class ShimejiOverlayService : Service() {
         val ri = view.rootWindowInsets
         if (ri != null) {
             if (Build.VERSION.SDK_INT >= 30) {
+                // NOTE: IME insets are deliberately NOT subtracted. Overlay
+                // windows on some OEM builds report persistent, bogus IME
+                // insets even with the keyboard closed, which would push the
+                // mascot far above the real bottom edge. The mascot may be
+                // visually overlapped by the keyboard while typing instead.
                 val typeMask =
                     android.view.WindowInsets.Type.systemBars() or
                         android.view.WindowInsets.Type.displayCutout() or
-                        android.view.WindowInsets.Type.systemGestures() or
-                        android.view.WindowInsets.Type.ime()
+                        android.view.WindowInsets.Type.systemGestures()
                 val list = ri.getInsets(typeMask)
                 return Rect(list.left, list.top, list.right, list.bottom)
             }

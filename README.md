@@ -115,9 +115,10 @@ Implemented:
   transparent pixels *inside* its rectangle (Android has no supported
   nonrectangular hit-test without hidden APIs). The window is sized to the
   mascot to minimize this.
-- IME insets are only excluded if the overlay window reports them, which
-  overlay windows commonly do not; the mascot may be visually overlapped by
-  the keyboard while typing.
+- IME insets are deliberately not excluded from the usable box (some OEMs
+  report persistent, bogus IME insets on overlay windows even with the
+  keyboard closed, which would float the mascot far above the ground). The
+  mascot may therefore be visually overlapped by the keyboard while typing.
 - `BATTERY_STATS` is a normal (install-time) permission on API < 23 and a
   signature/privileged permission on modern Android — it will generally read
   as "not granted" on a regular build. The plugin reports availability via

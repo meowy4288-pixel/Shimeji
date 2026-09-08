@@ -16,7 +16,7 @@ import kotlin.math.sin
  */
 class ProceduralMascotRenderer(
     private val look: MascotLook = MascotLook(),
-) {
+) : MascotRenderer {
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = look.bodyColor }
     private val eyeWhitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
     private val pupilPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF222222.toInt() }
@@ -47,7 +47,7 @@ class ProceduralMascotRenderer(
         val accentColor: Int = 0xFFFFD166.toInt(),
     )
 
-    fun draw(
+    override fun draw(
         canvas: Canvas,
         width: Int,
         height: Int,

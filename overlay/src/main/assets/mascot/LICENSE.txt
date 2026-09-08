@@ -1,0 +1,20 @@
+Bundled mascot character: the classic Shimeji
+
+Frames: shime1.png ... shime46.png are from the original Shimeji desktop
+mascot program by Yuki Yamada (http://www.group-finity.com/Shimeji).
+
+This APK bundles a subset of those frames (see poses.json and
+docs/character-plan.md in the source repository).
+
+License: the original program and its bundled assets are distributed under a
+zlib/libpng-style license ("Permission is granted to anyone to use this
+software for any purpose, including commercial applications, and to alter it
+and redistribute it freely ..."). See the LICENSE file in the upstream
+linux-shimeji project (estenv) which redistributed this character set.
+
+Attribution: Yuki Yamada / Shimeji original program, ported for Linux by
+estenv (https://github.com/estenv/linux-shimeji).
+
+NOTE (from project memory): before any wider commercial redistribution,
+verify the exact character-image license terms in the upstream archive; this
+source repo treats code and bundled images under the same zlib-style terms.
