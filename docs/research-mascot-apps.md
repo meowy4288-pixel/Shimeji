@@ -97,7 +97,9 @@ fling/trip), true FGS lifecycle, zero network permission.
    registry (still trusted, no downloads). Backlog.
 7. **Care-gameplay (stats)** — genre mismatch with Shimeji mischief; explicitly **not** adopting.
 
-**Things we verified we should NOT copy:** WebView-rendered pets (arkpets — 92 MB repo, JS-in-HTML
+**Things we verified we should NOT copy (architectural/spec reasons ONLY — licensing is NOT a
+factor: this is a non-commercial/personal project, per user decision, so we can lift features,
+assets, and behavior patterns freely)**: WebView-rendered pets (arkpets — 92 MB repo, JS-in-HTML
 monolith, no testability); per-frame mod hooks (MobileGoose — too low-level); Unity 3D mascot
 (uDesktopMascot — desktop-only, heavyweight); localhost HTTP control APIs (PetDesk — open local
 port violates our no-network stance; our EventBus already covers in-process model→pet).

@@ -112,6 +112,13 @@ serialization 1.6.2.
 - NOT copying: WebView-rendered pets (no testability), per-frame mod hooks, Unity 3D, localhost HTTP
   control API (violates no-network stance), care/tamagotchi gameplay (genre mismatch).
 
+## Decisions — copying / licensing stance
+- USER: "it doesn't matter if we copy, it's not a commercial product." Personal/sideloaded
+  project (2 users). Treat other mascot apps as a menu: lift features, assets, behavior
+  patterns freely; no licensing gatekeeping. Keep our OWN hard constraints (no network
+  permission, no AccessibilityService rendering, overlay-based, trusted compiled-in plugins).
+- Recorded in research-mascot-apps.md: NOT-copy list is now architectural/spec-only.
+
 ## Milestone — Interaction + Animation (2024-09-09-ish, device I2405/API36)
 - **New pose states (14 animations / 25 frames total)**: sit(`shime11`), dangle-legs(`shime31,33`), lie(`shime21`), look_up(`shime26`), jump(`shime22`), bounce(`shime18,19`), poke(`shime5,6`), trip(`shime20,19`); frames copied from `linux-shimeji/img/`, RCA via `poses.json`.
 - **Tap-to-interact**: `MascotView.poke()` → weighted random jump/bounce/poke via `fsm.forceState`, gated by `canAcceptVisualCommand(COSMETIC_FEEDBACK)` (drag blocks it). Service differentiates tap (<400ms, no drag) from drag in ACTION_UP.
