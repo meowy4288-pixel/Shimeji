@@ -1,0 +1,73 @@
+{
+  "initial": "idle",
+  "fallbackState": "idle",
+  "gravity": 1500,
+  "maxFallSpeed": 900,
+  "states": [
+    {
+      "id": "idle",
+      "animation": "idle",
+      "frameDurationMs": 400,
+      "frames": ["idle-a", "idle-b"],
+      "looping": true,
+      "transitions": [
+        { "to": "walking", "guard": "RANDOM_ANYTIME", "cooldownMs": 2500, "weight": 1.0 },
+        { "to": "falling", "guard": "AIRBORNE", "cooldownMs": 0, "weight": 1.0 }
+      ]
+    },
+    {
+      "id": "walking",
+      "animation": "walk",
+      "frameDurationMs": 160,
+      "frames": ["walk-a", "walk-b"],
+      "looping": true,
+      "transitions": [
+        { "to": "idle", "guard": "RANDOM_ANYTIME", "cooldownMs": 3000, "weight": 1.0 },
+        { "to": "climbing", "guard": "NEAR_LEFT_CLIMB", "cooldownMs": 0, "weight": 1.0 },
+        { "to": "climbing", "guard": "NEAR_RIGHT_CLIMB", "cooldownMs": 0, "weight": 1.0 },
+        { "to": "falling", "guard": "AIRBORNE", "cooldownMs": 0, "weight": 1.0 }
+      ]
+    },
+    {
+      "id": "falling",
+      "animation": "fall",
+      "frameDurationMs": 120,
+      "frames": ["fall"],
+      "looping": true,
+      "transitions": [
+        { "to": "idle", "guard": "GROUNDED", "cooldownMs": 150, "weight": 1.0 }
+      ]
+    },
+    {
+      "id": "climbing",
+      "animation": "climb",
+      "frameDurationMs": 200,
+      "frames": ["climb-a", "climb-b"],
+      "looping": true,
+      "durationMs": 900,
+      "transitions": [
+        { "to": "falling", "guard": "RANDOM_ANYTIME", "cooldownMs": 800, "weight": 1.0 },
+        { "to": "idle", "guard": "RANDOM_ANYTIME", "cooldownMs": 1200, "weight": 0.4 }
+      ]
+    },
+    {
+      "id": "dragging",
+      "animation": "drag",
+      "frameDurationMs": 120,
+      "frames": ["drag-a", "drag-b"],
+      "looping": true,
+      "transitions": []
+    },
+    {
+      "id": "tool_feedback",
+      "animation": "magic_cast",
+      "frameDurationMs": 90,
+      "frames": ["cast-a", "cast-b", "cast-c"],
+      "looping": false,
+      "durationMs": 600,
+      "transitions": [
+        { "to": "idle", "guard": "RANDOM_ANYTIME", "cooldownMs": 0, "weight": 1.0 }
+      ]
+    }
+  ]
+}

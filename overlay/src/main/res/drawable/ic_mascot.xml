@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <!-- Simple procedural mascot glyph used as the notification/launcher icon. -->
+    <path
+        android:fillColor="#FF5E7CE2"
+        android:pathData="M48,8 a40,40 0 1,0 0,80 a40,40 0 1,0 0,-80 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M32,42 a7,9 0 1,0 0,18 a7,9 0 1,0 0,-18 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M64,42 a7,9 0 1,0 0,18 a7,9 0 1,0 0,-18 Z" />
+    <path
+        android:fillColor="#FF2B2B2B"
+        android:pathData="M32,46 a4,5 0 1,0 0,10 a4,5 0 1,0 0,-10 Z" />
+    <path
+        android:fillColor="#FF2B2B2B"
+        android:pathData="M64,46 a4,5 0 1,0 0,10 a4,5 0 1,0 0,-10 Z" />
+    <path
+        android:strokeColor="#FF2B2B2B"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M38,68 Q48,74 58,68" />
+</vector>
