@@ -95,9 +95,9 @@ class MascotView(
             lastGrounded = state.grounded
         }
 
-        // Autonomous wander while grounded and walking.
+        // Autonomous walk intent only; physics.step() already integrated/collided above.
         if (fsm.currentState.animation == "walk") {
-            physics.wander(state, b, dtMs / 1000f)
+            physics.applyWalkIntent(state)
         } else if (state.grounded) {
             // Damp residual horizontal velocity while idling to avoid drifting.
             state.vx *= 0.90f

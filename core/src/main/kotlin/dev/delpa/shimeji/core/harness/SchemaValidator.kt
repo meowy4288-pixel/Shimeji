@@ -40,7 +40,10 @@ object SchemaValidator {
     }
 
     fun validate(value: JsonElement?, schema: JsonObject): List<ValidationError> {
-        if (value == null || value is JsonNull) return emptyList()
+        if (value == null || value is JsonNull) {
+            val type = schema[SchemaKeywords.TYPE]?.jsonPrimitive?.content
+            return if (type != null) listOf(ValidationError.TypeMismatch("\$", type, "null")) else emptyList()
+        }
         val errors = mutableListOf<ValidationError>()
         validateNode(value, schema, "\$", errors)
         return errors
@@ -86,7 +89,7 @@ object SchemaValidator {
             ?: emptyList()
 
         for (req in required) {
-            if (!obj.containsKey(req)) {
+            if (!obj.containsKey(req) || obj[req] is JsonNull) {
                 errors += ValidationError.MissingProperty(path, req)
             }
         }

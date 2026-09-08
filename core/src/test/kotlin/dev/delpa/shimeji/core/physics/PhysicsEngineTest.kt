@@ -106,4 +106,22 @@ class PhysicsEngineTest {
         assertEquals(before.x, s.x)
         assertEquals(before.y, s.y)
     }
+
+    @Test
+    fun `walk intent then step does not double integrate`() {
+        val engine = PhysicsEngine(moveSpeed = 100f)
+        val b = bounds()
+        val s = PhysicsState(x = 10f, y = b.bottom)
+        s.grounded = true
+        val dt = 1f / 60f
+
+        // applyWalkIntent sets velocity but never touches position.
+        engine.applyWalkIntent(s)
+        assertEquals(100f, s.vx, 0.001f)
+        assertEquals(10f, s.x, 0.001f)
+
+        // A single step integrates exactly once: x += vx * dt.
+        engine.step(s, b, dt)
+        assertEquals(10f + 100f * dt, s.x, 0.001f, "position must advance exactly one integration")
+    }
 }

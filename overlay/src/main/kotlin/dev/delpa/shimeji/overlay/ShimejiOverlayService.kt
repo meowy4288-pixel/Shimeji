@@ -7,12 +7,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
-import android.graphics.Point
 import android.graphics.Rect
-import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -24,7 +21,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
-import dev.delpa.shimeji.core.event.HarnessEvent
 import dev.delpa.shimeji.core.event.VisualCommand
 import dev.delpa.shimeji.core.fsm.FsmConfig
 import dev.delpa.shimeji.core.fsm.FsmEvent
@@ -42,7 +38,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.coroutines.resume
@@ -159,7 +154,11 @@ class ShimejiOverlayService : Service() {
             ).apply { description = getString(R.string.channel_desc) }
             nm.createNotificationChannel(channel)
         }
-        startForeground(NOTIFICATION_ID, buildNotification())
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+        )
     }
 
     private fun buildNotification(): Notification {
@@ -387,7 +386,6 @@ class ShimejiOverlayService : Service() {
     private suspend fun collectVisualEvents(engineHost: HarnessEngine) {
         engineHost.events.collect { event ->
             when (event) {
-                is HarnessEvent.ToolCallAccepted -> triggerAnimation("magic_cast")
                 is VisualCommand.PlayAnimation -> triggerAnimation(event.animation)
                 else -> Unit
             }

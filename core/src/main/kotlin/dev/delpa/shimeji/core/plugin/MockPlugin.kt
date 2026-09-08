@@ -9,6 +9,7 @@ import dev.delpa.shimeji.core.harness.ToolNames
 import dev.delpa.shimeji.core.harness.ToolPermission
 import dev.delpa.shimeji.core.harness.ToolResult
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -53,7 +54,7 @@ class MockPlugin : ShimejiPlugin {
 
     override suspend fun executeTool(name: String, params: JsonObject): ToolResult = when (name) {
         ToolNames.MOCK_ECHO -> {
-            val text = params["text"]?.toString()?.removeSurrounding("\"") ?: ""
+            val text = (params["text"] as? JsonPrimitive)?.content ?: ""
             SuccessResult(
                 data = buildJsonObject { put("received", text) },
                 summary = "Echo: $text",

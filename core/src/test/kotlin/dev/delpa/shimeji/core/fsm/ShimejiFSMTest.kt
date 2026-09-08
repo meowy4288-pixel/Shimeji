@@ -7,6 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ShimejiFSMTest {
@@ -65,7 +66,7 @@ class ShimejiFSMTest {
         // eligibleTransitions excludes the AIRBORNE candidate when grounded; the
         // remaining candidate is the ONLY one and is always chosen after cooldown.
         val fsm = ShimejiFSM(config(), Random(42))
-        val picks = (0 until 5).map { fsm.selectWeighted(fsm.eligibleTransitions(nowMs = 0, grounded = true), 0) }
+        val picks = (0 until 5).map { fsm.selectWeighted(fsm.eligibleTransitions(nowMs = 0, grounded = true)) }
         assertTrue(picks.all { it == "walking" }, "only the eligible transition may be selected")
 
         // Two eligible transitions with weights 2:1 — both values appear across attempts.
@@ -82,7 +83,7 @@ class ShimejiFSMTest {
             fallbackState = "s",
         )
         val weighted = ShimejiFSM(cfg, Random(7))
-        val all = (0 until 8).map { weighted.selectWeighted(weighted.eligibleTransitions(nowMs = 0, grounded = true), 0) }
+        val all = (0 until 8).map { weighted.selectWeighted(weighted.eligibleTransitions(nowMs = 0, grounded = true)) }
         assertTrue(all.contains("a") && all.contains("b"), "both candidates allowed, got $all")
     }
 
@@ -99,9 +100,9 @@ class ShimejiFSMTest {
             fallbackState = "s",
         )
         val fsm = ShimejiFSM(cfg, Random(1))
-        assertEquals(null, fsm.selectWeighted(fsm.eligibleTransitions(nowMs = 0, grounded = true), 0))
+        assertEquals(null, fsm.selectWeighted(fsm.eligibleTransitions(nowMs = 0, grounded = true)))
         assertEquals("s", fsm.currentState.id)
-        assertEquals(null, fsm.selectWeighted(emptyList(), 0))
+        assertEquals(null, fsm.selectWeighted(emptyList()))
     }
 
     @Test
@@ -214,6 +215,25 @@ class ShimejiFSMTest {
         assertEquals("dragging", fsm.currentState.id)
         assertFalse(fsm.forceState("jump", 100), "drag must block reaction forces")
         assertEquals("dragging", fsm.currentState.id)
+    }
+
+    @Test
+    fun `validOrNull rejects incomplete configs`() {
+        // State with no frame references must be rejected by full validation.
+        val noFrames = """{"states":[{"id":"idle","animation":"idle","frames":[]}],"initial":"idle"}"""
+        assertNull(ShimejiFSM.validOrNull(noFrames))
+
+        // Transition to an unknown target must be rejected.
+        val badTarget = """{"states":[{"id":"idle","animation":"idle","frames":["a"],"transitions":[{"to":"missing"}]}],"initial":"idle"}"""
+        assertNull(ShimejiFSM.validOrNull(badTarget))
+
+        // Negative frame duration must be rejected.
+        val badDuration = """{"states":[{"id":"idle","animation":"idle","frames":["a"],"frameDurationMs":-1}],"initial":"idle"}"""
+        assertNull(ShimejiFSM.validOrNull(badDuration))
+
+        // A well-formed config still parses and validates.
+        val good = """{"states":[{"id":"idle","animation":"idle","frames":["a","b"]}],"initial":"idle"}"""
+        assertNotNull(ShimejiFSM.validOrNull(good))
     }
 
 }

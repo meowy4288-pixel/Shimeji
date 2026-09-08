@@ -186,7 +186,7 @@ private fun MainScreen(
                 title = "Tool catalog (revision ${catalog.revision})",
                 content = {
                     if (catalog.tools.isEmpty()) {
-                        Text("No callable tools — enable the device plugin.", style = MaterialTheme.typography.bodySmall)
+                        Text("No callable tools. Enable a plugin below, or run the mock agent (its echo tool is callable once enabled).", style = MaterialTheme.typography.bodySmall)
                     }
                     catalog.tools.forEach { tool ->
                         Text(
@@ -204,7 +204,7 @@ private fun MainScreen(
                         Text("Unavailable:", style = MaterialTheme.typography.labelSmall)
                         catalog.unavailableToolSignatures.forEach { u ->
                             Text(
-                                "${u.pluginId}.${u.toolName}: ${u.reason}",
+                                "${u.pluginId} / ${u.toolName}: ${u.reason}",
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }

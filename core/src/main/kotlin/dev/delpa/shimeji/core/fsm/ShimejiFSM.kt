@@ -96,7 +96,7 @@ class ShimejiFSM(
         if (dragActive) return currentState
 
         val eligible = eligibleTransitions(nowMs, grounded, hangingLeft, hangingRight)
-        val nextId = selectWeighted(eligible, nowMs) ?: currentStateId
+        val nextId = selectWeighted(eligible) ?: currentStateId
         if (nextId != currentStateId) {
             currentStateId = nextId
             lastTransitionTime = nowMs
@@ -175,7 +175,7 @@ class ShimejiFSM(
      *  - zero total / empty candidates => null (stay in current state).
      *  - invalid numbers already rejected at config validation.
      */
-    internal fun selectWeighted(candidates: List<FsmTransition>, nowMs: Long): String? {
+    internal fun selectWeighted(candidates: List<FsmTransition>): String? {
         if (candidates.isEmpty()) return null
         val total = candidates.sumOf { it.weight }
         if (total <= 0.0) return null
@@ -228,10 +228,10 @@ class ShimejiFSM(
 
         fun validOrNull(rawJson: String): FsmConfig? = try {
             val cfg = Json { ignoreUnknownKeys = true }.decodeFromString<FsmConfig>(rawJson)
-            // Validation mirrors the constructor check without throwing into the caller.
-            if (cfg.states.isEmpty()) null
-            else if (cfg.initial !in cfg.states.map { it.id }) null
-            else cfg
+            // Full constructor validation (frames, weights, fallback, gravity,
+            // transition targets) without throwing into the caller.
+            ShimejiFSM(cfg)
+            cfg
         } catch (t: Throwable) {
             null
         }

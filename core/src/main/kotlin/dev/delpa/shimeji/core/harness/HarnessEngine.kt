@@ -8,14 +8,10 @@ import dev.delpa.shimeji.core.plugin.PluginStateSnapshot
 import dev.delpa.shimeji.core.plugin.PluginStatus
 import dev.delpa.shimeji.core.plugin.ShimejiPlugin
 import dev.delpa.shimeji.core.plugin.SystemInfo
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,8 +24,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -51,16 +45,12 @@ class HarnessEngine(
     private val defaultTimeoutMillis: Long = 15_000L,
     private val dupHistorySize: Int = 256,
     private val requestIdFactory: RequestIdFactory = DefaultRequestIdFactory,
-    private val dispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Default,
 ) {
     private data class Entry(
         val plugin: ShimejiPlugin,
         val state: MutableStateFlow<PluginStateSnapshot>,
         val executionMutex: Mutex = Mutex(),
-        var enableJob: Job? = null,
-        var disableJob: Job? = null,
         var toolDefinitions: List<ToolDefinition> = emptyList(),
-        val blockedByDoc: Boolean = false,
     )
 
     private val _eventBus: EventBus = object : EventBus {
@@ -124,9 +114,7 @@ class HarnessEngine(
     }
 
     suspend fun unregister(pluginId: String) = lock.withLock {
-        val entry = registry.remove(pluginId) ?: return
-        entry.enableJob?.cancel()
-        entry.disableJob?.cancel()
+        registry.remove(pluginId) ?: return
         refreshStatesLocked()
         refreshCatalogLocked()
     }
@@ -182,8 +170,6 @@ class HarnessEngine(
      */
     private suspend fun immediateDisable(entry: Entry, reason: String) {
         entry.state.update { it.copy(status = PluginStatus.DISABLED, enabled = false, errorMessage = reason) }
-        entry.enableJob?.cancel()
-        entry.disableJob?.cancel()
     }
 
     // ------------------------------------------------------------------
@@ -208,29 +194,28 @@ class HarnessEngine(
         val requestId = request.requestId ?: requestIdFactory.next()
         val toolName = request.toolName
         val pluginId = request.pluginId
-        pendingParams[requestId] = request.params
 
         // Shutdown gate takes precedence so a stopped engine reports SHUTTING_DOWN.
         if (shuttingDown.get()) {
             val err = HarnessError(ErrorCode.SHUTTING_DOWN, "Harness is shutting down")
-            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED)
+            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED, request.params)
             return FailureResult(ErrorCode.SHUTTING_DOWN.name, "Harness is shutting down")
         }
         // Startup gate. No silent loss.
         if (!_started.value) {
             val err = HarnessError(ErrorCode.NOT_STARTED, "Harness is not started")
-            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED)
+            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED, request.params)
             return FailureResult(ErrorCode.NOT_STARTED.name, "Harness is not started")
         }
 
         // Duplicate request-id guard (bounded in-process history).
         if (!rememberRequestId(requestId)) {
             val err = HarnessError(ErrorCode.DUPLICATE_REQUEST_ID, "Duplicate request id: $requestId")
-            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED)
+            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED, request.params)
             return FailureResult(ErrorCode.DUPLICATE_REQUEST_ID.name, "Duplicate request id")
         }
 
-        publish(requestId, pluginId, toolName, null, EventPhase.REQUESTED)
+        publish(requestId, pluginId, toolName, null, EventPhase.REQUESTED, request.params)
 
         // Validation under lock but WITHOUT holding it during execution.
         val validation: Validation = lock.withLock {
@@ -240,7 +225,7 @@ class HarnessEngine(
 
         if (validation is Validation.Rejected) {
             val err = validation.error
-            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED)
+            publish(requestId, pluginId, toolName, err, EventPhase.REJECTED, request.params)
             return FailureResult(err.code.name, err.message)
         }
         if (validation is Validation.ConfirmationBlocked) {
@@ -251,20 +236,20 @@ class HarnessEngine(
                 paramsJson = kotlinx.serialization.json.Json.encodeToString(JsonObject.serializer(), request.params),
             )
             _toolResults.tryEmit(c)
-            publish(requestId, pluginId, toolName, null, EventPhase.ACCEPTED)
-            publish(requestId, pluginId, toolName, c, EventPhase.COMPLETED)
+            publish(requestId, pluginId, toolName, null, EventPhase.ACCEPTED, request.params)
+            publish(requestId, pluginId, toolName, c, EventPhase.COMPLETED, request.params)
             return c
         }
 
         val accepted = validation as Validation.Accepted
         val timeoutMs = request.timeoutMillis ?: defaultTimeoutMillis
 
-        publish(requestId, pluginId, toolName, null, EventPhase.ACCEPTED)
+        publish(requestId, pluginId, toolName, null, EventPhase.ACCEPTED, request.params)
         // Visual feedback fires right after acceptance, before execution even
         // begins, and never blocks or implies success (result events are separate).
         _eventBus.emit(dev.delpa.shimeji.core.event.VisualCommand.PlayAnimation("magic_cast"))
         // "Execution start" is distinct from acceptance.
-        publish(requestId, pluginId, toolName, null, EventPhase.STARTED)
+        publish(requestId, pluginId, toolName, null, EventPhase.STARTED, request.params)
 
         return accepted.entry.executionMutex.withLock {
             // Revalidate immediately before execution: may have changed since validation.
@@ -274,7 +259,7 @@ class HarnessEngine(
                     ?: HarnessError(ErrorCode.PLUGIN_DISABLING, "Target changed before execution")
                 val res = FailureResult(err.code.name, err.message)
                 _toolResults.tryEmit(res)
-                publish(requestId, pluginId, toolName, err, EventPhase.FAILED)
+                publish(requestId, pluginId, toolName, err, EventPhase.FAILED, request.params)
                 res
             } else {
                 executeAndComplete(requestId, pluginId, toolName, request.params, timeoutMs, accepted.entry)
@@ -307,9 +292,17 @@ class HarnessEngine(
         }
         _toolResults.tryEmit(result)
         if (result is FailureResult) {
-            publish(requestId, pluginId, toolName, HarnessError(ErrorCode.PLUGIN_ERROR, result.message, pluginId, toolName, requestId), EventPhase.FAILED)
+            val code = runCatching { ErrorCode.valueOf(result.code) }.getOrDefault(ErrorCode.PLUGIN_ERROR)
+            publish(
+                requestId,
+                pluginId,
+                toolName,
+                HarnessError(code, result.message, pluginId, toolName, requestId),
+                EventPhase.FAILED,
+                params,
+            )
         } else {
-            publish(requestId, pluginId, toolName, result, EventPhase.COMPLETED)
+            publish(requestId, pluginId, toolName, result, EventPhase.COMPLETED, params)
         }
         return result
     }
@@ -329,12 +322,10 @@ class HarnessEngine(
         toolName: String,
         resultOrError: Any?,
         phase: Int,
+        paramsForRequested: JsonObject,
     ) {
         val event: HarnessEvent = when (phase) {
-            EventPhase.REQUESTED -> {
-                val rp = pendingParams[requestId] ?: JsonObject(emptyMap())
-                HarnessEvent.ToolCallRequested(requestId, pluginId, toolName, rp)
-            }
+            EventPhase.REQUESTED -> HarnessEvent.ToolCallRequested(requestId, pluginId, toolName, paramsForRequested)
             EventPhase.ACCEPTED -> HarnessEvent.ToolCallAccepted(requestId, pluginId, toolName)
             EventPhase.STARTED -> HarnessEvent.ToolCallStarted(requestId, pluginId, toolName)
             EventPhase.COMPLETED -> HarnessEvent.ToolCallCompleted(requestId, pluginId, toolName, resultOrError as ToolResult)
@@ -349,9 +340,6 @@ class HarnessEngine(
         }
         _eventBus.emit(event)
     }
-
-    // params retained only for REQUESTED publishing; never retained long-term.
-    private val pendingParams = ConcurrentHashMap<String, JsonObject>()
 
     /** One execution per accepted request: callers that re-submit get a DUPLICATE id failure. */
     private fun rememberRequestId(requestId: String): Boolean = synchronized(recentIdsSet) {
@@ -377,7 +365,6 @@ class HarnessEngine(
         toolName: String,
         params: JsonObject,
     ): Validation {
-        pendingParams[requestId] = params
         val entry = registry[pluginId] ?: return Validation.Rejected(
             HarnessError(ErrorCode.UNKNOWN_TOOL, "Unknown plugin: $pluginId", pluginId, toolName, requestId),
         )
@@ -438,7 +425,7 @@ class HarnessEngine(
     }
 
     private fun describe(e: SchemaValidator.ValidationError): String = when (e) {
-        is SchemaValidator.ValidationError.MissingProperty -> "missing '$e.property' at ${e.path}"
+        is SchemaValidator.ValidationError.MissingProperty -> "missing '${e.property}' at ${e.path}"
         is SchemaValidator.ValidationError.TypeMismatch -> "type mismatch at ${e.path}: expected ${e.expected}, got ${e.actual}"
         is SchemaValidator.ValidationError.OutOfRange -> "out of range at ${e.path}: ${e.message}"
         is SchemaValidator.ValidationError.NotInEnum -> "value not in enum at ${e.path}"
@@ -453,19 +440,18 @@ class HarnessEngine(
 
     private suspend fun refreshCatalogLockedNoLock() {
         val revision = catalogRevision.incrementAndGet()
-        val enabled = registry.values.filter { it.state.value.status == PluginStatus.ENABLED }
-        val tools = enabled.flatMap { it.toolDefinitions }
-        val unavailable = registry.values.flatMap { e ->
+        val tools = mutableListOf<ToolDefinition>()
+        val unavailable = mutableListOf<UnavailableTool>()
+        for (e in registry.values) {
             val st = e.state.value.status
-            e.toolDefinitions.flatMap { def ->
-                when {
-                    st != PluginStatus.ENABLED -> listOf(
-                        UnavailableTool(e.plugin.metadata.id, def.name, "plugin is $st"),
-                    )
-                    def.requiresCapability != null && !capabilityAvailable(e.plugin, def.requiresCapability) -> listOf(
-                        UnavailableTool(e.plugin.metadata.id, def.name, "missing capability ${def.requiresCapability}"),
-                    )
-                    else -> emptyList()
+            for (def in e.toolDefinitions) {
+                if (st == PluginStatus.ENABLED) {
+                    tools += def
+                    if (def.requiresCapability != null && !capabilityAvailable(e.plugin, def.requiresCapability)) {
+                        unavailable += UnavailableTool(e.plugin.metadata.id, def.name, "missing capability ${def.requiresCapability}")
+                    }
+                } else {
+                    unavailable += UnavailableTool(e.plugin.metadata.id, def.name, "plugin is $st")
                 }
             }
         }
@@ -526,7 +512,6 @@ class HarnessEngine(
         requestId: String? = null,
         timeoutMillis: Long? = null,
     ): ToolResult {
-        pendingParams[requestId ?: requestIdFactory.next()] = params
         return submitToolCall(ToolCallRequest(pluginId, toolName, params, timeoutMillis, requestId))
     }
 

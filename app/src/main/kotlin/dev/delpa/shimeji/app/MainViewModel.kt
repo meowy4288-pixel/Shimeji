@@ -64,7 +64,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopMascot() {
-        harness.stopService(ShimejiOverlayService.intent(harness))
+        // Deliver the STOP action so the foreground notification is removed;
+        // a plain stopService() would leave the notification behind.
+        harness.startService(
+            ShimejiOverlayService.intent(harness).setAction(ShimejiOverlayService.ACTION_STOP),
+        )
     }
 
     fun togglePlugin(pluginId: String, enable: Boolean) {

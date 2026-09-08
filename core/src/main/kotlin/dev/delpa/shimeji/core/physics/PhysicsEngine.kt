@@ -42,12 +42,10 @@ data class PhysicsState(
 )
 
 class PhysicsEngine(
-    private val random: kotlin.random.Random = kotlin.random.Random,
     private val gravity: Float = 1500f,
     private val maxFallSpeed: Float = 900f,
     private val moveSpeed: Float = 160f,
     private val maxReleaseSpeed: Float = 1100f,
-    private val dragDamping: Float = 12f,
     private val bounce: Float = 0.12f,
     private val maxTimestepSeconds: Float = 1f / 20f,
 ) {
@@ -82,16 +80,14 @@ class PhysicsEngine(
         }
     }
 
-    /** Autonomous horizontal wander with random direction changes at walls. */
-    fun wander(state: PhysicsState, bounds: PhysicsBounds, dt: Float) {
-        val delta = min(dt, maxTimestepSeconds)
+    /**
+     * Autonomous walk intent: sets horizontal velocity only. Integration and
+     * collision happen in [step]; callers must not double-integrate.
+     */
+    fun applyWalkIntent(state: PhysicsState) {
         if (state.grounded) {
             state.vx = moveSpeed * (if (state.facingLeft) -1f else 1f)
-        } else {
-            state.vx *= (1f - dragDamping * delta)
         }
-        integrate(state, bounds, delta)
-        collide(state, bounds)
     }
 
     fun releaseFromDrag(state: PhysicsState, rawVx: Float, rawVy: Float) {
