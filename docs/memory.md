@@ -122,6 +122,32 @@ serialization 1.6.2.
 - Accessibility: overlay never needed it (rendering). Optional opt-in OBSERVER (foreground app + window
   edges) is the only unlock; Play risk moot for 2 users but consent/OEM/spec costs remain. PENDING user call.
 
+## Milestone — Phase A: review-doc fixes + hygiene (commit 0b82769, pushed)
+- HarnessEngine: removed pendingParams leak (params passed straight to REQUESTED publish);
+  timeout FAILED events now carry ErrorCode.TIMEOUT; describe() missing-property fix;
+  removed unused dispatcher ctor param, dead Entry.enableJob/disableJob/blockedByDoc, unused
+  imports; catalog refresh is now single-pass; submitFromAgent no longer leaks params.
+- SchemaValidator: required-but-null now MissingProperty; top-level null with typed schema is
+  TypeMismatch (new SchemaValidatorTest x4).
+- FSM: validOrNull runs FULL constructor validation (frames/weights/fallback/gravity/targets);
+  selectWeighted dead nowMs param removed (tests updated).
+- Physics: wander()->applyWalkIntent() sets vx ONLY (fixes button double-integration bug);
+  removed unused random/dragDamping params.
+- Overlay: startForeground(NOTIFICATION_ID, ..., FOREGROUND_SERVICE_TYPE_SPECIAL_USE) — API 34+
+  fix, verified on I2405/API36; overlay reacts ONLY to VisualCommand.PlayAnimation (removed
+  ToolCallAccepted branch — fixes double animation trigger); removed unused imports.
+- App: stopMascot now sends ACTION_STOP (notification removal); catalog copy fixed;
+  pluginId / toolName formatting; MockPlugin echo uses JsonPrimitive.content.
+- Tests: 42/42 PASS; :app:assembleDebug OK. Device smoke: FGS notification ONGOING|NO_CLEAR
+  present, type-2038 overlay at frame bottom edge, user physically dragging mascot.
+- NEW GOTCHA: device lock screen blocks UI automation — `adb shell locksettings set-disabled
+  true` unlocks (then re-enable with set-disabled false); don't pump synthetic input while the
+  user is on the phone — check dumpsys window mCurrentFocus first.
+- NEXT (Phase B, base-feature completion): long-press action menu, cling/ceiling states (+ pull
+  shime10/12/23-25 frames), throw-spin, dazed, multi-mascot spawner, settings persistence,
+  chase-finger, jump-to crosshair, tap-facing. Then Phase C: accessibility opt-in observer
+  (app filter + window edges) + AI/agent extras.
+
 ## Decisions — copying / licensing stance
 - USER: "it doesn't matter if we copy, it's not a commercial product." Personal/sideloaded
   project (2 users). Treat other mascot apps as a menu: lift features, assets, behavior
