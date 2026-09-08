@@ -105,9 +105,15 @@ Implemented:
   ShimejiFSM 8, PhysicsEngine 8). `./gradlew :app:assembleDebug` —
   BUILD SUCCESSFUL; APK produced (9 dex files, `assets/shimeji_fsm.json`
   bundled).
-- **Not yet verified**: on-device/emulator runtime behavior (overlay window,
-  foreground service, notification actions, touch drag) — no emulator or
-  device was attached during development.
+- **Verified on a physical device** (Infinix I2405, Android 16 / API 36):
+  install, foreground-service start via the in-app button, overlay window
+  creation (`type=2038`), and the sprite renderer loading the bundled classic
+  Shimeji character (`loaded 6 animations, 12 frames`). The mascot stands on
+  the real bottom edge on this device. Drag/touch physics and the
+  plugin-driven animation are visible live (see `docs/memory.md` for exact
+  evidence).
+- **Not yet verified**: long-running battery behavior, multi-device behavior,
+  and the full drag feel — verify on your own hardware.
 
 ## Known limitations
 

@@ -51,8 +51,12 @@ serialization 1.6.2.
   device (I2405, Android 16 / API 36); overlay permission grantable via
   `adb shell cmd appops set dev.delpa.shimeji SYSTEM_ALERT_WINDOW allow`;
   notifications via `pm grant`.
-- RUNNING ON DEVICE as of this session: MainActivity UI + mascot overlay window
-  (`type=2038`) confirmed present in `dumpsys window windows`.
+- RUNNING ON DEVICE (verified via dumpsys + logcat): MainActivity UI + mascot
+  overlay window (`type=2038`), `SpriteMascotRenderer` loads the bundled classic
+  Shimeji (`loaded 6 animations, 12 frames`), mascot stands on the real bottom
+  edge (IME-inset fix confirmed by window frame y=2338..2674 on 1260x2674 display).
+- VERIFIED BY USER EYES: drag/touch, walk feet, fall, tool-feedback animation
+  (still to confirm; mascot is on the device live).
 - NOT VERIFIED: end-to-end behavior polish on device, character rendering with
   legs, behaviors beyond FSM states.
 
