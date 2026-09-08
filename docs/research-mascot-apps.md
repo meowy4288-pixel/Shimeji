@@ -111,3 +111,53 @@ project goals: physics, testable core, permission-aware plugins, offline-first, 
 The two immediately-winnable adoptions are **tap-facing toggle** and a **tool_thinking state**;
 both are small and directly serve the interaction + agent-visibility story. Everything else is
 backlog or genre-mismatch.
+
+## Browser-extension Shimeji world (new research pass)
+
+The user reported that the browser Shimeji extension (same classic sprite lineage — that's why
+"our shimeji" shows up) has many features we lack. Sources: `deceasedone/web_companion` (1719-line
+TS/React Shimeji replication, credits shimejis.xyz + classic Shimeji), `fuyufjh/ArkPets-Chrome`
+(real Chrome extension pattern: content-script canvases + settings persistence). Key confirmation:
+**the classic action set and frame numbering are identical to our bundled sprites** — web_companion
+comments: `1 stand / 2,3 walk / 4 grabbed / 9 fall / 10 splat / 11 sit / 12,13 wall climb /
+14 wall hold / 18,19 ceiling / 20 ceiling hold`. We already ship 13,14,18,19,20; missing for
+cling/ceiling/splat: 10 (splat), 12 (first climb frame), plus 23–25 (sleep) etc. from linux-shimeji.
+
+### The full classic action menu (ground context)
+walk along window floor · run · crawl · walk left/right and sit · grab window left/right wall ·
+walk and grab wall · pull up shimeji* · stand up · sit down · sit while dangling legs · lie down ·
+sleep · split into two* · sit and face mouse · sit and spin head · chase mouse · pin to mouse ·
+steal something · throw element… · jump to… · remove · remove all. Ceiling/wall contexts swap in
+climb along [ceiling]/hold onto/fall from + wall variants. Wall context adds climb up [wall].
+
+### Feature-gap matrix (browser/classic → Android-adoptable)
+| Feature | Where seen | Android analog | Effort | Blocked by |
+|---|---|---|---|---|
+| Context action menu | web_companion, classic | long-press → action sheet → `fsm.forceState(...)` (context-aware) | M | none |
+| Climb wall / ceiling / hold / drop | classic, web_companion | 3 new FSM states + frames (mostly already bundled; pull shime10/12/23-25) | M (next milestone) | none |
+| Spin while thrown | web_companion (`rot += vx*0.25`) | rotate bitmap during `thrown` | S | none |
+| Splat → dazed stun | web_companion | `dazed` state: stun timer + stars | S | none |
+| Multi-mascot summon / dismiss / count | web_companion `useShimeji`, ArkPets `activeCharacters[]` | spawner UI + k overlay windows | M (backlog) | none |
+| Settings persistence (characters, size, toggles) | ArkPets `chrome.storage.local` | SharedPreferences/DataStore | S | none |
+| App filter (blacklist/hide-on-app) | ArkPets websiteFilter + fullscreen-hide | hide mascot on chosen apps → needs foreground-app | S | accessibility observer (opt-in) OR UsageStats appop |
+| Walk on real window edges / grab window walls | classic "window floor/wall", web_companion platforms | per-app window bounds | M | accessibility observer (opt-in) |
+| Steal page elements / synthetic taps | web_companion `data-shimeji-stealable` | tap injection — NOT doing (accessibility-as-action) | M | accessibility (out of scope) |
+| Chase mouse / pin to mouse / face mouse | web_companion | overlay gets pointer events → chase finger while held | S-M | none |
+| Jump to… / throw element… (selectors) | web_companion | crosshair mode: tap target → mascot jumps there | M | none |
+| Split into two / pull up shimeji | classic joke actions | skip | — | — |
+
+### Accessibility decision block (user question: "why are we not doing accessibility?")
+- We never needed it for RENDERING: `TYPE_APPLICATION_OVERLAY` already draws above every app and
+  the user sees/touches the mascot live. Accessibility as a rendering mechanism is the classic
+  Play-policy abuse pattern (scary consent dialog "read your screen", store rejection, OEM
+  fragility) — and our own spec explicitly ruled it out.
+- The ONLY real gains as an OPTIONAL OBSERVER (window geometry + foreground app, never touch
+  injection): (a) hide-on-app / per-app behavior (ArkPets fullscreen-hide analog), (b) walking on
+  real app window edges + grabbing window walls — the classic signature move.
+- Since this is a personal sideloaded app (non-commercial), Play-policy risk is moot for 2 users.
+  Remaining cons: consent dialog, OEM reliability, observer overhead, spec deviation.
+- **Decision point**: keep spec (no accessibility; window mimicry stays approximate) OR add an
+  opt-in observer toggle (default OFF, gated behind settings, `canAcceptVisualCommand`-style
+  guard) that unlocks foreground-awareness + true window-edge geometry. Overlay stays the only
+  render/touch layer either way, and tapping is never injected.
+- Recorded in memory.md; pending user call.

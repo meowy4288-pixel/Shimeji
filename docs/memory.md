@@ -112,6 +112,16 @@ serialization 1.6.2.
 - NOT copying: WebView-rendered pets (no testability), per-frame mod hooks, Unity 3D, localhost HTTP
   control API (violates no-network stance), care/tamagotchi gameplay (genre mismatch).
 
+## Research — Browser-extension Shimeji world (research-mascot-apps.md)
+- Classic browser Shimeji uses the SAME sprite lineage as ours (frame numbering matches: 1 stand / 2,3 walk /
+  4 grabbed / 9 fall / 10 splat / 11 sit / 12,13 climb / 14 wall hold / 18,19 ceiling / 20 ceiling hold). We
+  already bundle 13,14,18,19,20; pull shime10/12/23-25 for cling/ceiling/splat states.
+- Full classic action menu transcribed; gap matrix built. Adopt candidates: long-press action menu,
+  cling/ceiling states (next milestone), throw-spin, dazed-splat, multi-mascot spawner, settings
+  persistence, chase-finger, jump-to-target crosshair. NOT: steal/inject taps.
+- Accessibility: overlay never needed it (rendering). Optional opt-in OBSERVER (foreground app + window
+  edges) is the only unlock; Play risk moot for 2 users but consent/OEM/spec costs remain. PENDING user call.
+
 ## Decisions — copying / licensing stance
 - USER: "it doesn't matter if we copy, it's not a commercial product." Personal/sideloaded
   project (2 users). Treat other mascot apps as a menu: lift features, assets, behavior
