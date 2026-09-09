@@ -21,6 +21,7 @@ class MascotView(
     fsmConfig: FsmConfig,
     private val renderer: MascotRenderer,
     internal val physics: PhysicsEngine,
+    internal val prefs: MascotPrefs = MascotPrefs(context),
     private val random: kotlin.random.Random = kotlin.random.Random,
 ) : View(context) {
 
@@ -29,10 +30,26 @@ class MascotView(
 
         /** Downward fall speed beyond which a fling landing trips the mascot. */
         private const val TRIP_IMPACT_VY = 1400f
+
+        /** FSM states gated by the idle-variety toggle. */
+        private val VARIETY_STATES = setOf("sit", "dangle", "lie", "look_up")
     }
 
     val fsm: ShimejiFSM = ShimejiFSM(fsmConfig, random)
     val state: PhysicsState = PhysicsState(x = 0f, y = 0f)
+
+    /** Set by the Service's touch handler while the user is dragging. While
+     *  true, physics runs in DRAG mode so gravity/integration stop fighting the
+     *  touch-driven position. */
+    var dragging = false
+        set(value) {
+            if (value && !field) {
+                // Grabbing a falling mascot resets the fall-context so a gentle,
+                // hand-placed release never trips the hard-landing animation.
+                peakFallVy = 0f
+            }
+            field = value
+        }
 
     private var bounds: PhysicsBounds? = null
     private var animPhaseMs = 0L
@@ -62,8 +79,15 @@ class MascotView(
         val wasGrounded = lastGrounded
         if (!state.grounded) peakFallVy = maxOf(peakFallVy, state.vy)
 
-        physics.step(state, b, dtMs / 1000f)
-        physics.rest(state, b)
+        // While dragging, physics pins the mascot to the touch position instead
+        // of applying gravity/integration (which would make it fall between
+        // touch events).
+        if (dragging) {
+            physics.step(state, b, dtMs / 1000f, PhysicsEngine.Input.drag(state.x, state.y))
+        } else {
+            physics.step(state, b, dtMs / 1000f)
+            physics.rest(state, b)
+        }
 
         // FSM stepping is decoupled from frame rate (300ms cadence).
         fsmStepAccum += dtMs
@@ -75,6 +99,18 @@ class MascotView(
         // Reset animation phase whenever the FSM state changes so non-looping
         // reactions (jump/poke/trip/magic_cast) play from their first frame.
         val st = fsm.currentState
+
+        // Gate idle variety: if the user disabled variety, force back to idle
+        // when the FSM autonomously picks sit/dangle/lie/look_up.
+        if (!prefs.idleVariety && st.id in VARIETY_STATES) {
+            fsm.forceState("idle", nowAnimMs)
+        }
+        // Gate walk: if the user disabled walking, force back to idle when the
+        // FSM autonomously picks walking.
+        if (!prefs.walk && fsm.currentState.id == "walking") {
+            fsm.forceState("idle", nowAnimMs)
+        }
+
         if (st.id != lastStateId) {
             Log.i(TAG, "state: ${lastStateId ?: "-"} -> ${st.id}")
             lastStateId = st.id
@@ -96,7 +132,7 @@ class MascotView(
         }
 
         // Autonomous walk intent only; physics.step() already integrated/collided above.
-        if (fsm.currentState.animation == "walk") {
+        if (fsm.currentState.animation == "walk" && prefs.walk) {
             physics.applyWalkIntent(state)
         } else if (state.grounded) {
             // Damp residual horizontal velocity while idling to avoid drifting.
@@ -133,6 +169,10 @@ class MascotView(
 
     private var currentFrameIndex = 0
 
+    // Avoids allocating a new PhysicsStatePublic per draw frame.
+    private var cachedDrawState = PhysicsStatePublic.of(false)
+    private var cachedFacingLeft: Boolean? = null
+
     fun setBounds(newBounds: PhysicsBounds, resetCompletion: Boolean = false) {
         bounds = newBounds
         physics.clampToBounds(state, newBounds)
@@ -145,11 +185,15 @@ class MascotView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val st = fsm.currentState
+        if (cachedFacingLeft != state.facingLeft) {
+            cachedFacingLeft = state.facingLeft
+            cachedDrawState = PhysicsStatePublic.of(state.facingLeft)
+        }
         renderer.draw(
             canvas = canvas,
             width = width,
             height = height,
-            state = PhysicsStatePublic.of(state.facingLeft),
+            state = cachedDrawState,
             animationName = st.animation,
             frameIndex = currentFrameIndex,
             frameCount = st.frames.size,

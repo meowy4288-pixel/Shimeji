@@ -33,7 +33,18 @@ class SpriteMascotRenderer private constructor(
         private const val ORIGINAL_FRAME = 128
         private const val DEFAULT_SCALE = 0.86f
 
-        /** Build from assets; returns null if poses.json or frames are unusable. */
+        /** Build from pre-loaded bitmaps (custom character). */
+        fun fromAnimations(
+            animations: Map<String, List<Bitmap>>,
+            scale: Float = DEFAULT_SCALE,
+        ): SpriteMascotRenderer? {
+            if (animations.isEmpty()) return null
+            val total = animations.values.sumOf { it.size }
+            Log.i(TAG, "loaded ${animations.size} animations, $total frames (custom)")
+            return SpriteMascotRenderer(animations, scale)
+        }
+
+        /** Build from bundled assets; returns null if poses.json or frames are unusable. */
         fun load(context: Context): SpriteMascotRenderer? {
             return runCatching {
                 val raw = context.assets.open("mascot/poses.json")

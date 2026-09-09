@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.MotionEvent
@@ -71,6 +72,7 @@ class ShimejiOverlayService : Service() {
         const val ACTION_STOP = "dev.delpa.shimeji.overlay.action.STOP"
         private const val TAG = "ShimejiOverlay"
         private const val TAP_MAX_MS = 400L
+        private const val DEFAULT_MASCOT_SCALE = 0.86f
 
         /** Explicit intent used by MainActivity and notification actions. */
         fun intent(context: Context) = Intent(context, ShimejiOverlayService::class.java)
@@ -104,6 +106,7 @@ class ShimejiOverlayService : Service() {
     // Metrics
     private var lastMetricsWidth = 0
     private var lastMetricsHeight = 0
+    private var lastInsets: Rect? = null
     private var frameCounter = 0L
 
     private val engine: HarnessEngine?
@@ -211,8 +214,11 @@ class ShimejiOverlayService : Service() {
     // Window attach / cleanup
     // ------------------------------------------------------------------
 
-    private fun mascotSizePx(): Int =
-        (112 * resources.displayMetrics.density).roundToInt()
+    private val mascotSizePx: Int
+        get() {
+            val prefs = MascotPrefs(this)
+            return (112 * resources.displayMetrics.density * prefs.mascotScale).roundToInt()
+        }
 
     private fun ensureAttached() {
         if (attached && mascotView != null) return
@@ -229,7 +235,7 @@ class ShimejiOverlayService : Service() {
         )
         mascotView = view
 
-        val size = mascotSizePx()
+        val size = mascotSizePx
         val lp = WindowManager.LayoutParams(
             size,
             size,
@@ -272,16 +278,35 @@ class ShimejiOverlayService : Service() {
     }
 
     /**
-     * Renderer selection: bundled sprite character when its assets load,
-     * otherwise zero-asset procedural fallback. Chosen once at attach time.
+     * Renderer selection: custom character from internal storage first, then
+     * bundled sprite character, then zero-asset procedural fallback.
      */
     private fun loadMascotRenderer(): MascotRenderer {
+        val prefs = MascotPrefs(this)
+        val selected = prefs.selectedCharacter
+
+        // Try custom character from internal storage.
+        if (selected.isNotEmpty()) {
+            val charManager = CharacterManager(this)
+            val anims = charManager.loadCharacter(selected)
+            if (anims != null) {
+                val scale = DEFAULT_MASCOT_SCALE * prefs.mascotScale
+                val sprite = SpriteMascotRenderer.fromAnimations(anims, scale)
+                if (sprite != null) {
+                    Log.i(TAG, "using custom character: $selected")
+                    return sprite
+                }
+            }
+            Log.w(TAG, "custom character '$selected' failed to load; trying bundled")
+        }
+
+        // Fall back to bundled classic Shimeji.
         val sprite = SpriteMascotRenderer.load(this)
         if (sprite != null) {
-            android.util.Log.i(TAG, "using SpriteMascotRenderer (bundled classic Shimeji)")
+            Log.i(TAG, "using SpriteMascotRenderer (bundled classic Shimeji)")
             return sprite
         }
-        android.util.Log.w(TAG, "sprite mascot unavailable; using procedural fallback")
+        Log.w(TAG, "sprite mascot unavailable; using procedural fallback")
         return ProceduralMascotRenderer()
     }
 
@@ -316,6 +341,11 @@ class ShimejiOverlayService : Service() {
         mascotView = null
         params = null
         bounds = null
+        // Force a full recompute on the next attach (metrics/insets may be
+        // cached from an identical prior run).
+        lastInsets = null
+        lastMetricsWidth = 0
+        lastMetricsHeight = 0
     }
 
     override fun onDestroy() {
@@ -433,6 +463,7 @@ class ShimejiOverlayService : Service() {
                 val rawY = event.rawY
                 if (!dragging && hypot(rawX - downRawX, rawY - downRawY) > touchSlop) {
                     dragging = true
+                    view.dragging = true // physics pins position; no gravity while held
                     view.fsm.onEvent(FsmEvent.DRAG_STARTED, System.currentTimeMillis())
                 }
                 if (dragging) {
@@ -454,11 +485,21 @@ class ShimejiOverlayService : Service() {
             }
             MotionEvent.ACTION_UP -> {
                 if (dragging) {
+                    view.dragging = false
                     view.physics.releaseFromDrag(view.state, pendingVx, pendingVy)
                     view.fsm.onEvent(FsmEvent.DRAG_ENDED, System.currentTimeMillis())
                 } else if (event.eventTime - downEventTime < TAP_MAX_MS) {
-                    // Quick tap (no drag): social reaction animation.
-                    view.poke(System.currentTimeMillis())
+                    // Quick tap: face the tap direction, then poke.
+                    val size = mascotSizePx
+                    val tapLocalX = event.x
+                    val halfW = size / 2f
+                    val prefs = MascotPrefs(view.context)
+                    if (prefs.tapFacing) {
+                        view.state.facingLeft = tapLocalX < halfW
+                    }
+                    if (prefs.tapPoke) {
+                        view.poke(System.currentTimeMillis())
+                    }
                 }
                 dragging = false
                 return true
@@ -466,6 +507,7 @@ class ShimejiOverlayService : Service() {
             MotionEvent.ACTION_CANCEL -> {
                 // Treat as release with no velocity (do not fling after cancel).
                 if (dragging) {
+                    view.dragging = false
                     view.physics.releaseFromDrag(view.state, 0f, 0f)
                     view.fsm.onEvent(FsmEvent.DRAG_ENDED, System.currentTimeMillis())
                 }
@@ -476,6 +518,7 @@ class ShimejiOverlayService : Service() {
                 // Single-pointer design: dropping the primary pointer ends the drag.
                 if (event.actionIndex == 0) {
                     if (dragging) {
+                        view.dragging = false
                         view.physics.releaseFromDrag(view.state, pendingVx, pendingVy)
                         view.fsm.onEvent(FsmEvent.DRAG_ENDED, System.currentTimeMillis())
                     }
@@ -522,13 +565,24 @@ class ShimejiOverlayService : Service() {
     private fun recomputeBounds() {
         val view = mascotView ?: return
         val metrics = DisplayMetrics().also { wm?.defaultDisplay?.getRealMetrics(it) }
-        if (lastMetricsWidth != metrics.widthPixels || lastMetricsHeight != metrics.heightPixels) {
-            lastMetricsWidth = metrics.widthPixels
-            lastMetricsHeight = metrics.heightPixels
-        }
-
         val insets = currentInsets(view)
-        val size = mascotSizePx()
+        // Early-out: nothing relevant changed since the last pass (same metrics
+        // and insets) — avoids allocating a PhysicsBounds and re-setting bounds
+        // every 30 frames.
+        if (metrics.widthPixels == lastMetricsWidth &&
+            metrics.heightPixels == lastMetricsHeight &&
+            insets.left == lastInsets?.left &&
+            insets.top == lastInsets?.top &&
+            insets.right == lastInsets?.right &&
+            insets.bottom == lastInsets?.bottom
+        ) {
+            return
+        }
+        lastInsets = insets
+        lastMetricsWidth = metrics.widthPixels
+        lastMetricsHeight = metrics.heightPixels
+
+        val size = mascotSizePx
 
         val left = insets.left.toFloat()
         val top = insets.top.toFloat()

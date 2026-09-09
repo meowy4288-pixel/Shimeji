@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.ShimejiHarness" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#FF7E9BF2</item>
+        <item name="android:statusBarColor">#FF3F5FB3</item>
     </style>
 </resources>

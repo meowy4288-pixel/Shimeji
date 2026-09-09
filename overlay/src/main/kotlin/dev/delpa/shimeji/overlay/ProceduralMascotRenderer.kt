@@ -42,6 +42,10 @@ class ProceduralMascotRenderer(
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
+    // Reusable paths: reset() before each use — avoids per-frame allocation.
+    private val legPath = Path()
+    private val mouthPath = Path()
+
     data class MascotLook(
         val bodyColor: Int = 0xFF7E9BF2.toInt(),
         val accentColor: Int = 0xFFFFD166.toInt(),
@@ -124,18 +128,16 @@ class ProceduralMascotRenderer(
                 canvas.drawLine(cx - r * 0.25f, bodyCy + r * 0.34f, cx + r * 0.25f, bodyCy + r * 0.30f, mouthPaint)
             }
             "walk" -> { // slight smile
-                val p = Path().apply {
-                    moveTo(cx - r * 0.22f, bodyCy + r * 0.30f)
-                    quadTo(cx, bodyCy + r * 0.42f, cx + r * 0.22f, bodyCy + r * 0.28f)
-                }
-                canvas.drawPath(p, mouthPaint)
+                mouthPath.reset()
+                mouthPath.moveTo(cx - r * 0.22f, bodyCy + r * 0.30f)
+                mouthPath.quadTo(cx, bodyCy + r * 0.42f, cx + r * 0.22f, bodyCy + r * 0.28f)
+                canvas.drawPath(mouthPath, mouthPaint)
             }
             else -> { // idle smile
-                val p = Path().apply {
-                    moveTo(cx - r * 0.20f, bodyCy + r * 0.28f)
-                    quadTo(cx, bodyCy + r * 0.38f, cx + r * 0.20f, bodyCy + r * 0.28f)
-                }
-                canvas.drawPath(p, mouthPaint)
+                mouthPath.reset()
+                mouthPath.moveTo(cx - r * 0.20f, bodyCy + r * 0.28f)
+                mouthPath.quadTo(cx, bodyCy + r * 0.38f, cx + r * 0.20f, bodyCy + r * 0.28f)
+                canvas.drawPath(mouthPath, mouthPaint)
             }
         }
 
@@ -145,11 +147,10 @@ class ProceduralMascotRenderer(
     }
 
     private fun drawLeg(canvas: Canvas, footX: Float, hipY: Float, dx: Float, lift: Float) {
-        val path = Path().apply {
-            moveTo(footX, hipY)
-            quadTo(footX + dx * 0.4f, hipY + 12f, footX + dx, hipY + 12f + lift)
-        }
-        canvas.drawPath(path, mouthPaint)
+        legPath.reset()
+        legPath.moveTo(footX, hipY)
+        legPath.quadTo(footX + dx * 0.4f, hipY + 12f, footX + dx, hipY + 12f + lift)
+        canvas.drawPath(legPath, mouthPaint)
     }
 
     private fun drawEye(canvas: Canvas, ex: Float, ey: Float, er: Float, pupilShift: Float, sparkle: Boolean) {

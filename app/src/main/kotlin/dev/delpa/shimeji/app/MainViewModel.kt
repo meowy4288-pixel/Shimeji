@@ -14,6 +14,8 @@ import dev.delpa.shimeji.core.harness.ConfirmationRequired
 import dev.delpa.shimeji.core.harness.FailureResult
 import dev.delpa.shimeji.core.harness.SuccessResult
 import dev.delpa.shimeji.core.harness.ToolNames
+import dev.delpa.shimeji.overlay.CharacterManager
+import dev.delpa.shimeji.overlay.MascotPrefs
 import dev.delpa.shimeji.overlay.ShimejiOverlayService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +31,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val harness: ShimejiHarnessApplication = app as ShimejiHarnessApplication
     val engine get() = harness.engine
     private val mockAgent get() = harness.mockAgent
+    val mascotPrefs = MascotPrefs(app)
+
+    private val _tapPoke = MutableStateFlow(mascotPrefs.tapPoke)
+    val tapPoke: StateFlow<Boolean> = _tapPoke.asStateFlow()
+
+    private val _tapFacing = MutableStateFlow(mascotPrefs.tapFacing)
+    val tapFacing: StateFlow<Boolean> = _tapFacing.asStateFlow()
+
+    private val _walk = MutableStateFlow(mascotPrefs.walk)
+    val walk: StateFlow<Boolean> = _walk.asStateFlow()
+
+    private val _idleVariety = MutableStateFlow(mascotPrefs.idleVariety)
+    val idleVariety: StateFlow<Boolean> = _idleVariety.asStateFlow()
+
+    private val charManager = CharacterManager(app)
+
+    private val _characters = MutableStateFlow(charManager.list())
+    val characters: StateFlow<List<String>> = _characters.asStateFlow()
+
+    private val _selectedCharacter = MutableStateFlow(mascotPrefs.selectedCharacter)
+    val selectedCharacter: StateFlow<String> = _selectedCharacter.asStateFlow()
+
+    private val _mascotScale = MutableStateFlow(mascotPrefs.mascotScale)
+    val mascotScale: StateFlow<Float> = _mascotScale.asStateFlow()
 
     private val _overlayGranted = MutableStateFlow(false)
     val overlayGranted: StateFlow<Boolean> = _overlayGranted.asStateFlow()
@@ -115,5 +141,55 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 else -> "OK"
             }
         }
+    }
+
+    fun setTapPoke(enabled: Boolean) {
+        mascotPrefs.tapPoke = enabled
+        _tapPoke.value = enabled
+    }
+
+    fun setTapFacing(enabled: Boolean) {
+        mascotPrefs.tapFacing = enabled
+        _tapFacing.value = enabled
+    }
+
+    fun setWalk(enabled: Boolean) {
+        mascotPrefs.walk = enabled
+        _walk.value = enabled
+    }
+
+    fun setIdleVariety(enabled: Boolean) {
+        mascotPrefs.idleVariety = enabled
+        _idleVariety.value = enabled
+    }
+
+    fun importCharacter(name: String, uri: Uri) {
+        viewModelScope.launch {
+            val result = charManager.importFromUri(name, uri)
+            if (result != null) {
+                _characters.value = charManager.list()
+                _selectedCharacter.value = result
+                mascotPrefs.selectedCharacter = result
+            }
+        }
+    }
+
+    fun selectCharacter(name: String) {
+        mascotPrefs.selectedCharacter = name
+        _selectedCharacter.value = name
+    }
+
+    fun deleteCharacter(name: String) {
+        charManager.delete(name)
+        _characters.value = charManager.list()
+        if (mascotPrefs.selectedCharacter == name) {
+            mascotPrefs.selectedCharacter = ""
+            _selectedCharacter.value = ""
+        }
+    }
+
+    fun setMascotScale(scale: Float) {
+        mascotPrefs.mascotScale = scale
+        _mascotScale.value = scale
     }
 }
