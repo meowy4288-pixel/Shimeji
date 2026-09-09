@@ -45,6 +45,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _idleVariety = MutableStateFlow(mascotPrefs.idleVariety)
     val idleVariety: StateFlow<Boolean> = _idleVariety.asStateFlow()
 
+    private val _appAwareness = MutableStateFlow(mascotPrefs.appAwareness)
+    val appAwareness: StateFlow<Boolean> = _appAwareness.asStateFlow()
+
     private val charManager = CharacterManager(app)
 
     private val _characters = MutableStateFlow(charManager.list())
@@ -158,6 +161,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _walk.value = enabled
     }
 
+    fun setAppAwareness(enabled: Boolean) {
+        mascotPrefs.appAwareness = enabled
+        _appAwareness.value = enabled
+    }
+
     fun setIdleVariety(enabled: Boolean) {
         mascotPrefs.idleVariety = enabled
         _idleVariety.value = enabled
@@ -191,5 +199,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setMascotScale(scale: Float) {
         mascotPrefs.mascotScale = scale
         _mascotScale.value = scale
+    }
+
+    // ------------------------------------------------------------
+    // Simulation — trigger mascot reactions directly from UI
+    // ------------------------------------------------------------
+
+    /** Trigger a specific FSM state on the running mascot. */
+    fun triggerMascotState(stateId: String) {
+        // The overlay service receives VisualCommand events from the harness engine.
+        // We send a command through the engine's event bus to trigger animations.
+        viewModelScope.launch {
+            val result = engine.submitFromAgent(
+                pluginId = "device",
+                toolName = "play_animation",
+                params = kotlinx.serialization.json.buildJsonObject {
+                    put("animation", stateId)
+                },
+            )
+            _lastResult.value = when (result) {
+                is SuccessResult -> "Triggered: $stateId"
+                is FailureResult -> "Failed: ${result.message}"
+                else -> "Queued: $stateId"
+            }
+        }
+    }
+
+    /** Simulate an app context change to test app awareness reactions. */
+    fun simulateAppContext(category: String) {
+        val intent = Intent("dev.delpa.shimeji.SIMULATE_CONTEXT").apply {
+            putExtra("category", category)
+        }
+        harness.sendBroadcast(intent)
+        _lastResult.value = "Simulated: $category context"
     }
 }

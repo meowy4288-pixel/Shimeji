@@ -1,6 +1,7 @@
 package dev.delpa.shimeji.overlay
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -155,6 +156,54 @@ class CharacterManager(private val context: Context) {
             Log.e(TAG, "failed to load character $name", err)
             null
         }
+    }
+
+    /**
+     * Get a preview thumbnail bitmap for a character.
+     * Returns the first frame of the idle animation, or the first available frame.
+     */
+    fun getPreviewBitmap(name: String, targetSize: Int = 64): Bitmap? {
+        return runCatching {
+            val dir = if (name.isEmpty()) {
+                File(context.filesDir, "../app/src/main/assets/mascot").also {
+                    if (!it.exists()) return null
+                }
+            } else {
+                dir(name)
+            }
+
+            val posesFile = File(dir, "poses.json")
+            if (!posesFile.exists()) return null
+
+            val root = JSONObject(posesFile.readText())
+            val animsJson = root.getJSONObject("animations")
+
+            // Try idle first, then first available animation
+            val animNames = listOf("idle", "sit", "walk").filter { animsJson.has(it) }
+            val animName = animNames.firstOrNull() ?: animsJson.keys().asSequence().firstOrNull() ?: return null
+
+            val list = animsJson.getJSONArray(animName)
+            if (list.length() == 0) return null
+
+            val file = list.getJSONObject(0).getString("file")
+            val frameFile = File(dir, file)
+            if (!frameFile.exists()) return null
+
+            val bmp = BitmapFactory.decodeFile(frameFile.absolutePath) ?: return null
+
+            // Scale down to target size
+            val scale = targetSize.toFloat() / maxOf(bmp.width, bmp.height)
+            if (scale < 1f) {
+                val scaled = Bitmap.createScaledBitmap(
+                    bmp,
+                    (bmp.width * scale).toInt(),
+                    (bmp.height * scale).toInt(),
+                    true
+                )
+                if (scaled != bmp) bmp.recycle()
+                scaled
+            } else bmp
+        }.getOrNull()
     }
 
     companion object {

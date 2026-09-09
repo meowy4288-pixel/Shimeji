@@ -9,10 +9,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -120,7 +125,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun MainScreen(
     viewModel: MainViewModel,
@@ -137,6 +142,7 @@ private fun MainScreen(
     val tapFacing by viewModel.tapFacing.collectAsState()
     val walk by viewModel.walk.collectAsState()
     val idleVariety by viewModel.idleVariety.collectAsState()
+    val appAwareness by viewModel.appAwareness.collectAsState()
     val characters by viewModel.characters.collectAsState()
     val selectedCharacter by viewModel.selectedCharacter.collectAsState()
     val mascotScale by viewModel.mascotScale.collectAsState()
@@ -270,42 +276,46 @@ private fun MainScreen(
                         checked = idleVariety,
                         onCheckedChange = viewModel::setIdleVariety,
                     )
+                    ToggleRow(
+                        label = "App awareness",
+                        description = "Mascot reacts to current app (via accessibility)",
+                        checked = appAwareness,
+                        onCheckedChange = viewModel::setAppAwareness,
+                    )
                 },
             )
 
             SectionCard(
                 title = "Characters",
                 content = {
-                    // Character selector
-                    Text("Active character", style = MaterialTheme.typography.labelSmall)
+                    // Grid-style character selector with thumbnails
+                    Text("Tap to select • Long press to delete", style = MaterialTheme.typography.labelSmall)
                     val allCharacters = listOf("") + characters
-                    allCharacters.forEach { name ->
-                        val displayName = if (name.isEmpty()) "Classic (bundled)" else name
-                        val isSelected = name == selectedCharacter
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            androidx.compose.material3.RadioButton(
-                                selected = isSelected,
-                                onClick = { viewModel.selectCharacter(name) },
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        allCharacters.forEach { name ->
+                            val displayName = if (name.isEmpty()) "Classic" else name
+                            val isSelected = name == selectedCharacter
+                            CharacterChip(
+                                name = displayName,
+                                isSelected = isSelected,
+                                onSelect = { viewModel.selectCharacter(name) },
+                                onDelete = if (name.isNotEmpty()) { { viewModel.deleteCharacter(name) } } else null,
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(displayName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            if (name.isNotEmpty()) {
-                                OutlinedButton(
-                                    onClick = { viewModel.deleteCharacter(name) },
-                                ) { Text("Delete") }
-                            }
                         }
+                        AddCharacterChip(onClick = onImportCharacter)
                     }
 
+                    // Current selection indicator
                     Spacer(Modifier.height(4.dp))
-                    OutlinedButton(onClick = onImportCharacter) {
-                        Text("Import character…")
-                    }
+                    Text(
+                        "Active: ${if (selectedCharacter.isEmpty()) "Classic (bundled)" else selectedCharacter}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
 
                     // Scale slider
                     Spacer(Modifier.height(8.dp))
@@ -318,6 +328,9 @@ private fun MainScreen(
                     )
                 },
             )
+
+            // Simulation section — test interactions without switching apps
+            SimulationSection(viewModel = viewModel, overlayGranted = overlayGranted)
 
             SectionCard(
                 title = "Tool catalog (revision ${catalog.revision})",
@@ -430,6 +443,123 @@ private fun ToggleRow(
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CharacterChip(
+    name: String,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onDelete: (() -> Unit)?,
+) {
+    var showDelete by remember { mutableStateOf(false) }
+    if (showDelete && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("Delete '$name'?") },
+            text = { Text("This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { onDelete(); showDelete = false }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDelete = false }) { Text("Cancel") }
+            },
+        )
+    }
+    FilterChip(
+        selected = isSelected,
+        onClick = onSelect,
+        label = { Text(name) },
+        trailingIcon = if (onDelete != null) {
+            { Text("×", modifier = Modifier.clickable { showDelete = true }) }
+        } else null,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddCharacterChip(onClick: () -> Unit) {
+    FilterChip(
+        selected = false,
+        onClick = onClick,
+        label = { Text("+ Import") },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SimulationSection(
+    viewModel: MainViewModel,
+    overlayGranted: Boolean,
+) {
+    SectionCard(
+        title = "Simulation — test interactions",
+        content = {
+            Text(
+                "Trigger mascot reactions directly. No need to open other apps.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+
+            // Reaction triggers — map to FSM states
+            Text("Reactions", style = MaterialTheme.typography.labelSmall)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // Core reactions
+                listOf(
+                    "excited" to "Excited",
+                    "curious" to "Curious",
+                    "dancing" to "Dancing",
+                    "watching" to "Watching",
+                    "calm_idle" to "Calm",
+                    "noticing" to "Noticing",
+                    "jump" to "Jump",
+                    "bounce" to "Bounce",
+                    "poke" to "Poke",
+                ).forEach { (stateId, label) ->
+                    OutlinedButton(
+                        onClick = { viewModel.triggerMascotState(stateId) },
+                        enabled = overlayGranted,
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    ) { Text(label, style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Text("Simulate app context", style = MaterialTheme.typography.labelSmall)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                listOf(
+                    "Instagram (social)" to "social",
+                    "Spotify (music)" to "music",
+                    "YouTube (video)" to "video",
+                    "Messages" to "messaging",
+                    "Home" to "home",
+                ).forEach { (label, cat) ->
+                    OutlinedButton(
+                        onClick = { viewModel.simulateAppContext(cat) },
+                        enabled = overlayGranted,
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    ) { Text(label, style = MaterialTheme.typography.labelSmall) }
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Tip: App simulation sets the mascot's perceived foreground app and bumps arousal so the next reaction is biased by that category.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
 }
 
 @Composable
