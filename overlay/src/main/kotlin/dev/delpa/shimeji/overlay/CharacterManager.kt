@@ -40,6 +40,11 @@ class CharacterManager(private val context: Context) {
      * Import a character from a zip file URI. The zip must contain
      * a `poses.json` and at least one PNG frame. Returns the character name
      * on success, null on failure.
+     *
+     * Path handling: entries are written preserving their relative paths so
+     * that `poses.json` `"file"` references survive. If every entry lives under
+     * a single top-level directory (the common "character_name/..." layout), that
+     * prefix is stripped so frames land directly in the character folder.
      */
     fun importFromZip(name: String, uri: Uri): String? {
         return runCatching {
@@ -50,42 +55,62 @@ class CharacterManager(private val context: Context) {
             var bytesWritten = 0L
             var hasPosesJson = false
 
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                ZipInputStream(inputStream).use { zip ->
-                    var entry = zip.nextEntry
-                    while (entry != null) {
-                        // Skip directories and hidden/macOS metadata files
-                        val entryName = entry.name
-                        if (!entry.isDirectory &&
-                            !entryName.contains("__MACOSX") &&
-                            !entryName.startsWith(".")
-                        ) {
-                            // Get just the filename (strip any folder paths in the zip)
-                            val fileName = entryName.substringAfterLast('/')
-                            val destFile = File(destDir, fileName)
-
-                            destFile.outputStream().use { output ->
-                                bytesWritten += zip.copyTo(output)
+            val staging = File(charsDir, ".staging_$name").apply { deleteRecursively(); mkdirs() }
+            try {
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    ZipInputStream(inputStream).use { zip ->
+                        var entry = zip.nextEntry
+                        while (entry != null) {
+                            if (!entry.isDirectory &&
+                                !entry.name.contains("__MACOSX") &&
+                                !entry.name.startsWith(".")
+                            ) {
+                                // Preserve the full relative path so poses.json
+                                // "file" references to subfolders keep working.
+                                val destFile = File(staging, entry.name)
+                                destFile.parentFile?.mkdirs()
+                                destFile.outputStream().use { output ->
+                                    bytesWritten += zip.copyTo(output)
+                                }
                             }
-
-                            if (fileName == "poses.json") hasPosesJson = true
+                            zip.closeEntry()
+                            entry = zip.nextEntry
                         }
-                        zip.closeEntry()
-                        entry = zip.nextEntry
                     }
                 }
+
+                // Locate poses.json anywhere in the staging tree.
+                val posesFile = staging.walkTopDown()
+                    .firstOrNull { it.isFile && it.name == "poses.json" }
+                if (posesFile == null || bytesWritten == 0L) {
+                    Log.w(TAG, "import rejected: no poses.json in zip for '$name'")
+                    return null
+                }
+                hasPosesJson = true
+
+                // Base directory = folder that contains poses.json. Move its
+                // contents to the final character dir (handles the common
+                // "character_name/poses.json + frames" layout).
+                val base = posesFile.parentFile ?: staging
+                base.listFiles()?.forEach { f ->
+                    val target = File(destDir, f.name)
+                    if (f.isDirectory) {
+                        f.copyRecursively(target, overwrite = true)
+                    } else {
+                        f.copyTo(target, overwrite = true)
+                    }
+                }
+            } finally {
+                staging.deleteRecursively()
             }
 
-            if (!hasPosesJson) {
-                destDir.deleteRecursively()
-                Log.w(TAG, "import rejected: no poses.json in zip for '$name'")
-                return null
-            }
+            if (!hasPosesJson) return null
 
             Log.i(TAG, "imported character '$name' from zip: ${bytesWritten / 1024} KB")
             name
         }.getOrElse { err ->
             Log.e(TAG, "import failed for $name", err)
+            File(charsDir, name).deleteRecursively()
             null
         }
     }
@@ -164,18 +189,26 @@ class CharacterManager(private val context: Context) {
      */
     fun getPreviewBitmap(name: String, targetSize: Int = 64): Bitmap? {
         return runCatching {
-            val dir = if (name.isEmpty()) {
-                File(context.filesDir, "../app/src/main/assets/mascot").also {
-                    if (!it.exists()) return null
+            val posesRaw: String
+            val readFrame: (String) -> Bitmap?
+            if (name.isEmpty()) {
+                // Bundled classic character — load from assets.
+                posesRaw = context.assets.open("mascot/poses.json")
+                    .bufferedReader().use { it.readText() }
+                readFrame = { file ->
+                    context.assets.open("mascot/$file").use {
+                        BitmapFactory.decodeStream(it)
+                    }
                 }
             } else {
-                dir(name)
+                val dir = dir(name)
+                val posesFile = File(dir, "poses.json")
+                if (!posesFile.exists()) return null
+                posesRaw = posesFile.readText()
+                readFrame = { file -> BitmapFactory.decodeFile(File(dir, file).absolutePath) }
             }
 
-            val posesFile = File(dir, "poses.json")
-            if (!posesFile.exists()) return null
-
-            val root = JSONObject(posesFile.readText())
+            val root = JSONObject(posesRaw)
             val animsJson = root.getJSONObject("animations")
 
             // Try idle first, then first available animation
@@ -186,10 +219,7 @@ class CharacterManager(private val context: Context) {
             if (list.length() == 0) return null
 
             val file = list.getJSONObject(0).getString("file")
-            val frameFile = File(dir, file)
-            if (!frameFile.exists()) return null
-
-            val bmp = BitmapFactory.decodeFile(frameFile.absolutePath) ?: return null
+            val bmp = readFrame(file) ?: return null
 
             // Scale down to target size
             val scale = targetSize.toFloat() / maxOf(bmp.width, bmp.height)

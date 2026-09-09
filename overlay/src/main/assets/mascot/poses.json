@@ -53,6 +53,35 @@
     "trip": [
       { "file": "shime20.png" },
       { "file": "shime19.png" }
+    ],
+    "excited": [
+      { "file": "shime18.png" },
+      { "file": "shime19.png" },
+      { "file": "shime22.png" },
+      { "file": "shime19.png" }
+    ],
+    "curious": [
+      { "file": "shime26.png" },
+      { "file": "shime1.png" }
+    ],
+    "calm": [
+      { "file": "shime11.png" }
+    ],
+    "noticing": [
+      { "file": "shime26.png" },
+      { "file": "shime1.png" }
+    ],
+    "watching": [
+      { "file": "shime26.png" },
+      { "file": "shime26.png" }
+    ],
+    "dancing": [
+      { "file": "shime2.png" },
+      { "file": "shime3.png" },
+      { "file": "shime2.png" }
+    ],
+    "quiet": [
+      { "file": "shime21.png" }
     ]
   }
 }

@@ -17,10 +17,13 @@ import dev.delpa.shimeji.core.harness.ToolNames
 import dev.delpa.shimeji.overlay.CharacterManager
 import dev.delpa.shimeji.overlay.MascotPrefs
 import dev.delpa.shimeji.overlay.ShimejiOverlayService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -173,19 +176,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun importCharacterZip(name: String, uri: Uri) {
         viewModelScope.launch {
-            val result = charManager.importFromZip(name, uri)
+            _lastResult.value = "Importing '$name'..."
+            val result = withContext(Dispatchers.IO) {
+                charManager.importFromZip(name, uri)
+            }
             if (result != null) {
                 _characters.value = charManager.list()
                 _selectedCharacter.value = result
                 mascotPrefs.selectedCharacter = result
+                _lastResult.value = "Imported '$name'. It is selected and applied."
+                applyCharacterToOverlay()
+            } else {
+                _lastResult.value = "Import failed: zip missing poses.json or unreadable. Some zips need to be a plain folder with poses.json + PNG frames."
             }
         }
     }
 
+    /**
+     * Pick a character. If the mascot is running, restart the overlay so the
+     * new renderer actually takes effect (the service only loads the renderer
+     * once at attach time).
+     */
     fun selectCharacter(name: String) {
         mascotPrefs.selectedCharacter = name
         _selectedCharacter.value = name
+        _lastResult.value = "Selected: ${if (name.isEmpty()) "Classic (bundled)" else name}"
+        applyCharacterToOverlay()
     }
+
+    /** Reload the overlay renderer (restart service) so the selected char applies. */
+    private fun applyCharacterToOverlay() {
+        if (!Settings.canDrawOverlays(harness) || !ShimejiOverlayService.overlayActive) return
+        viewModelScope.launch {
+            harness.startService(
+                ShimejiOverlayService.intent(harness).setAction(ShimejiOverlayService.ACTION_STOP)
+            )
+            delay(350)
+            harness.startService(
+                ShimejiOverlayService.intent(harness).setAction(ShimejiOverlayService.ACTION_START)
+            )
+        }
+    }
+
+    /** Load a character preview thumbnail (blocking decode; call from IO). */
+    fun previewBitmap(name: String): android.graphics.Bitmap? = charManager.getPreviewBitmap(name)
 
     fun deleteCharacter(name: String) {
         charManager.delete(name)
@@ -205,32 +239,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // Simulation — trigger mascot reactions directly from UI
     // ------------------------------------------------------------
 
-    /** Trigger a specific FSM state on the running mascot. */
+    /** Trigger a specific FSM state on the running mascot via broadcast. */
     fun triggerMascotState(stateId: String) {
-        // The overlay service receives VisualCommand events from the harness engine.
-        // We send a command through the engine's event bus to trigger animations.
-        viewModelScope.launch {
-            val result = engine.submitFromAgent(
-                pluginId = "device",
-                toolName = "play_animation",
-                params = kotlinx.serialization.json.buildJsonObject {
-                    put("animation", stateId)
-                },
-            )
-            _lastResult.value = when (result) {
-                is SuccessResult -> "Triggered: $stateId"
-                is FailureResult -> "Failed: ${result.message}"
-                else -> "Queued: $stateId"
-            }
-        }
+        harness.startService(
+            ShimejiOverlayService.intent(harness)
+                .setAction(ShimejiOverlayService.ACTION_TRIGGER)
+                .putExtra("state", stateId)
+        )
+        _lastResult.value = "Triggered: $stateId"
     }
 
     /** Simulate an app context change to test app awareness reactions. */
     fun simulateAppContext(category: String) {
-        val intent = Intent("dev.delpa.shimeji.SIMULATE_CONTEXT").apply {
-            putExtra("category", category)
-        }
-        harness.sendBroadcast(intent)
+        harness.startService(
+            ShimejiOverlayService.intent(harness)
+                .setAction(ShimejiOverlayService.ACTION_SIMULATE)
+                .putExtra("category", category)
+        )
         _lastResult.value = "Simulated: $category context"
     }
 }

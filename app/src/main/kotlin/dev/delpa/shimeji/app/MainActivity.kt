@@ -3,14 +3,18 @@ package dev.delpa.shimeji.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +46,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,9 +54,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.CircleShape
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -101,7 +112,17 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onImportCharacter = {
-                        importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                        // "*/*" fallback keeps zips selectable even when the
+                        // device's file manager reports a non-standard MIME.
+                        importLauncher.launch(
+                            arrayOf(
+                                "application/zip",
+                                "application/x-zip-compressed",
+                                "application/octet-stream",
+                                "application/x-7z-compressed",
+                                "*/*",
+                            )
+                        )
                     },
                 )
 
@@ -289,7 +310,7 @@ private fun MainScreen(
                 title = "Characters",
                 content = {
                     // Grid-style character selector with thumbnails
-                    Text("Tap to select • Long press to delete", style = MaterialTheme.typography.labelSmall)
+                    Text("Tap to select — the overlay restarts to apply the character", style = MaterialTheme.typography.labelSmall)
                     val allCharacters = listOf("") + characters
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -304,6 +325,7 @@ private fun MainScreen(
                                 isSelected = isSelected,
                                 onSelect = { viewModel.selectCharacter(name) },
                                 onDelete = if (name.isNotEmpty()) { { viewModel.deleteCharacter(name) } } else null,
+                                preview = rememberCharacterPreview(name, viewModel),
                             )
                         }
                         AddCharacterChip(onClick = onImportCharacter)
@@ -316,6 +338,19 @@ private fun MainScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
+
+                    // Import / selection feedback
+                    val feedback = lastResult
+                    if (feedback != null &&
+                        (feedback.startsWith("Import") || feedback.startsWith("Selected"))
+                    ) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            feedback,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
 
                     // Scale slider
                     Spacer(Modifier.height(8.dp))
@@ -452,6 +487,7 @@ private fun CharacterChip(
     isSelected: Boolean,
     onSelect: () -> Unit,
     onDelete: (() -> Unit)?,
+    preview: Bitmap?,
 ) {
     var showDelete by remember { mutableStateOf(false) }
     if (showDelete && onDelete != null) {
@@ -470,11 +506,44 @@ private fun CharacterChip(
     FilterChip(
         selected = isSelected,
         onClick = onSelect,
-        label = { Text(name) },
+        label = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val bmp = preview
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = name,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape),
+                    )
+                } else {
+                    // Placeholder while the preview decodes (or for no-image chars).
+                    Box(
+                        Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                    )
+                }
+                Spacer(Modifier.padding(start = 6.dp))
+                Text(name)
+            }
+        },
         trailingIcon = if (onDelete != null) {
             { Text("×", modifier = Modifier.clickable { showDelete = true }) }
         } else null,
     )
+}
+
+/** Decode a character thumbnail off the main thread (keyed by name). */
+@Composable
+private fun rememberCharacterPreview(name: String, viewModel: MainViewModel): Bitmap? {
+    var preview by remember(name) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(name) {
+        preview = withContext(Dispatchers.IO) { viewModel.previewBitmap(name) }
+    }
+    return preview
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

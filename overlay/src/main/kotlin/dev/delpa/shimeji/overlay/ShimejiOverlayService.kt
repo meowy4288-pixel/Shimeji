@@ -71,6 +71,12 @@ class ShimejiOverlayService : Service() {
         const val ACTION_PAUSE = "dev.delpa.shimeji.overlay.action.PAUSE"
         const val ACTION_RESUME = "dev.delpa.shimeji.overlay.action.RESUME"
         const val ACTION_STOP = "dev.delpa.shimeji.overlay.action.STOP"
+        const val ACTION_TRIGGER = "dev.delpa.shimeji.TRIGGER_ANIMATION"
+        const val ACTION_SIMULATE = "dev.delpa.shimeji.SIMULATE_CONTEXT"
+
+        /** True while the overlay window is attached and the frame loop runs. */
+        @Volatile
+        var overlayActive = false
         private const val TAG = "ShimejiOverlay"
         private const val TAP_MAX_MS = 400L
         private const val DEFAULT_MASCOT_SCALE = 0.86f
@@ -138,6 +144,50 @@ class ShimejiOverlayService : Service() {
                 cleanup()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+            }
+            ACTION_TRIGGER -> intent?.getStringExtra("state")?.let { triggerAnimation(it) }
+            ACTION_SIMULATE -> {
+                // Feed a fake app-context to the reaction engine so the mascot
+                // reacts as if a real app changed. This exercises the same
+                // emergent-reaction path as the AccessibilityService, without
+                // requiring a physical app switch.
+                val category = intent?.getStringExtra("category") ?: "home"
+                val appCat = when (category) {
+                    "social" -> dev.delpa.shimeji.overlay.accessibility.AppCategory.SOCIAL
+                    "music" -> dev.delpa.shimeji.overlay.accessibility.AppCategory.MUSIC
+                    "video" -> dev.delpa.shimeji.overlay.accessibility.AppCategory.VIDEO
+                    "messaging" -> dev.delpa.shimeji.overlay.accessibility.AppCategory.MESSAGING
+                    "games" -> dev.delpa.shimeji.overlay.accessibility.AppCategory.GAMES
+                    "productivity" -> dev.delpa.shimeji.overlay.accessibility.AppCategory.PRODUCTIVITY
+                    else -> dev.delpa.shimeji.overlay.accessibility.AppCategory.UNKNOWN
+                }
+                val ctx = dev.delpa.shimeji.overlay.accessibility.ScreenContext(
+                    // null foreground → the engine treats it as the home screen,
+                    // which is exactly what "Home" should simulate.
+                    foregroundPackage = if (category == "home") null else "simulated.$category",
+                    category = appCat,
+                    hasActiveNotification = false,
+                    lastChangedAt = System.currentTimeMillis(),
+                    screenOn = true,
+                )
+                mascotView?.screenContext = ctx
+                // Force a matching first reaction so the button ALWAYS produces
+                // something visible, even when App awareness is toggled off.
+                val view = mascotView
+                val now = System.currentTimeMillis()
+                if (view != null &&
+                    view.fsm.canAcceptVisualCommand(InterruptPriority.COSMETIC_FEEDBACK)
+                ) {
+                    val seedReaction = when (category) {
+                        "social" -> "excited"
+                        "music" -> "dancing"
+                        "video" -> "watching"
+                        "messaging" -> "bounce"
+                        "home" -> "idle"
+                        else -> "curious"
+                    }
+                    view.forceState(seedReaction, now)
+                }
             }
         }
         // User-started via visible interaction; do not silently resurrect.
@@ -262,6 +312,7 @@ class ShimejiOverlayService : Service() {
         try {
             overlayWm.addView(view, lp)
             attached = true
+            overlayActive = true
         } catch (t: Throwable) {
             // Failed window attachment: shut down cleanly rather than crash-loop.
             cleanup()
@@ -341,6 +392,7 @@ class ShimejiOverlayService : Service() {
         collectorJob = null
         scope?.cancel()
         scope = null
+        overlayActive = false
         mascotView?.setOnTouchListener(null)
         val view = mascotView
         val overlayWm = wm
