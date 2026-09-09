@@ -44,6 +44,11 @@ class MascotPrefs(context: Context) {
         get() = prefs.getFloat(KEY_MASCOT_SCALE, 1f)
         set(v) = prefs.edit().putFloat(KEY_MASCOT_SCALE, v).apply()
 
+    /** App awareness: mascot reacts to foreground app changes. */
+    var appAwareness: Boolean
+        get() = prefs.getBoolean(KEY_APP_AWARENESS, true)
+        set(v) = prefs.edit().putBoolean(KEY_APP_AWARENESS, v).apply()
+
     companion object {
         private const val PREFS_NAME = "shimeji_mascot"
         private const val KEY_TAP_POKE = "tap_poke"
@@ -52,5 +57,6 @@ class MascotPrefs(context: Context) {
         private const val KEY_IDLE_VARIETY = "idle_variety"
         private const val KEY_SELECTED_CHAR = "selected_character"
         private const val KEY_MASCOT_SCALE = "mascot_scale"
+        private const val KEY_APP_AWARENESS = "app_awareness"
     }
 }

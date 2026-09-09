@@ -7,6 +7,7 @@ import android.provider.DocumentsContract
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
+import java.util.zip.ZipInputStream
 
 /**
  * Manages custom character sprite sets stored in internal storage.
@@ -35,11 +36,11 @@ class CharacterManager(private val context: Context) {
     fun dir(name: String): File = File(charsDir, name)
 
     /**
-     * Import a character from a SAF directory URI. The directory must contain
+     * Import a character from a zip file URI. The zip must contain
      * a `poses.json` and at least one PNG frame. Returns the character name
-     * (directory name) on success, null on failure.
+     * on success, null on failure.
      */
-    fun importFromUri(name: String, uri: Uri): String? {
+    fun importFromZip(name: String, uri: Uri): String? {
         return runCatching {
             val destDir = File(charsDir, name)
             if (destDir.exists()) destDir.deleteRecursively()
@@ -48,44 +49,66 @@ class CharacterManager(private val context: Context) {
             var bytesWritten = 0L
             var hasPosesJson = false
 
-            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                val nameCol = cursor.getColumnIndexOrThrow("_display_name")
-                val mimeCol = cursor.getColumnIndexOrThrow("mime_type")
-                val docIdCol = cursor.getColumnIndexOrThrow("document_id")
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                ZipInputStream(inputStream).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        // Skip directories and hidden/macOS metadata files
+                        val entryName = entry.name
+                        if (!entry.isDirectory &&
+                            !entryName.contains("__MACOSX") &&
+                            !entryName.startsWith(".")
+                        ) {
+                            // Get just the filename (strip any folder paths in the zip)
+                            val fileName = entryName.substringAfterLast('/')
+                            val destFile = File(destDir, fileName)
 
-                while (cursor.moveToNext()) {
-                    val fileName = cursor.getString(nameCol)
-                    val mime = cursor.getString(mimeCol)
-                    val docId = cursor.getString(docIdCol)
+                            destFile.outputStream().use { output ->
+                                bytesWritten += zip.copyTo(output)
+                            }
 
-                    // Skip directories (they have vnd.android.document/directory MIME).
-                    if (mime == "vnd.android.document/directory") continue
-
-                    val childUri = DocumentsContract.buildDocumentUriUsingTree(uri, docId)
-                    val destFile = File(destDir, fileName)
-
-                    context.contentResolver.openInputStream(childUri)?.use { input ->
-                        destFile.outputStream().use { output ->
-                            bytesWritten += input.copyTo(output)
+                            if (fileName == "poses.json") hasPosesJson = true
                         }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
                     }
-
-                    if (fileName == "poses.json") hasPosesJson = true
                 }
             }
 
             if (!hasPosesJson) {
                 destDir.deleteRecursively()
-                Log.w(TAG, "import rejected: no poses.json in $name")
+                Log.w(TAG, "import rejected: no poses.json in zip for '$name'")
                 return null
             }
 
-            Log.i(TAG, "imported character '$name': ${bytesWritten / 1024} KB")
+            Log.i(TAG, "imported character '$name' from zip: ${bytesWritten / 1024} KB")
             name
         }.getOrElse { err ->
             Log.e(TAG, "import failed for $name", err)
             null
         }
+    }
+
+    /**
+     * Derive a character name from a URI's display name (e.g. "my_char.zip" → "my_char").
+     */
+    fun deriveNameFromUri(uri: Uri): String {
+        var name = "character_${System.currentTimeMillis() % 10000}"
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameCol = cursor.getColumnIndex("_display_name")
+                if (nameCol >= 0) {
+                    val displayName = cursor.getString(nameCol) ?: ""
+                    name = displayName
+                        .removeSuffix(".zip")
+                        .removeSuffix(".ZIP")
+                        .replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+                        .take(40)
+                        .ifBlank { name }
+                }
+            }
+        }
+        return name
     }
 
     /** Delete an imported character. Cannot delete "classic" (bundled). */

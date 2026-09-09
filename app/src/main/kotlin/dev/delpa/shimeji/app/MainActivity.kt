@@ -1,6 +1,7 @@
 package dev.delpa.shimeji.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -55,12 +56,26 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
-    // Observable URI for the import name dialog.
+    private val charManager = dev.delpa.shimeji.overlay.CharacterManager(this)
+
+    // Observable URI + auto-derived name for the import dialog.
     private val _pendingImportUri = mutableStateOf<Uri?>(null)
+    private val _pendingImportName = mutableStateOf("")
 
     private val importLauncher =
-        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-            if (uri != null) _pendingImportUri.value = uri
+        registerForActivityResult(
+            ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            if (uri != null) {
+                // Take persistable read permission so we can access the zip later.
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+                val derivedName = charManager.deriveNameFromUri(uri)
+                _pendingImportName.value = derivedName
+                _pendingImportUri.value = uri
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,16 +96,18 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onImportCharacter = {
-                        importLauncher.launch(null)
+                        importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
                     },
                 )
 
-                // Show name input dialog when a directory has been picked.
+                // Show name input dialog when a zip has been picked.
                 val uri = pendingUri
+                val derivedName by _pendingImportName
                 if (uri != null) {
                     ImportNameDialog(
+                        initialName = derivedName,
                         onConfirm = { name ->
-                            vm.importCharacter(name, uri)
+                            vm.importCharacterZip(name, uri)
                             _pendingImportUri.value = null
                         },
                         onDismiss = {
@@ -417,10 +434,11 @@ private fun ToggleRow(
 
 @Composable
 private fun ImportNameDialog(
+    initialName: String = "",
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Import character") },

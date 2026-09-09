@@ -11,6 +11,8 @@ import dev.delpa.shimeji.core.fsm.ShimejiFSM
 import dev.delpa.shimeji.core.physics.PhysicsBounds
 import dev.delpa.shimeji.core.physics.PhysicsEngine
 import dev.delpa.shimeji.core.physics.PhysicsState
+import dev.delpa.shimeji.overlay.awareness.ReactionEngine
+import dev.delpa.shimeji.overlay.accessibility.ScreenContext
 
 /**
  * The mascot window content. Owns physics + FSM + sprite animation timing and
@@ -33,10 +35,48 @@ class MascotView(
 
         /** FSM states gated by the idle-variety toggle. */
         private val VARIETY_STATES = setOf("sit", "dangle", "lie", "look_up")
+
+        /** States added by the awareness system. */
+        private val AWARENESS_STATES = setOf(
+            "excited", "curious", "calm_idle", "noticing", "watching",
+            "dancing", "quiet_sit",
+        )
     }
 
     val fsm: ShimejiFSM = ShimejiFSM(fsmConfig, random)
     val state: PhysicsState = PhysicsState(x = 0f, y = 0f)
+
+    /** Reaction engine for emergent app-aware behavior. */
+    val reactionEngine = ReactionEngine(random)
+
+    /** Current screen context from the AccessibilityService. */
+    var screenContext: ScreenContext = ScreenContext()
+        set(value) {
+            field = value
+            reactionEngine.step(value, System.currentTimeMillis())
+        }
+
+    /**
+     * Map a reaction name from the ReactionEngine to a valid FSM state.
+     * Returns null if the state doesn't exist in the current FSM config.
+     */
+    private fun mapReactionToState(reaction: String): String? {
+        return when (reaction) {
+            "excited" -> "excited"
+            "curious" -> "curious"
+            "calm_idle" -> "calm_idle"
+            "noticing" -> "noticing"
+            "watching" -> "watching"
+            "dancing" -> "dancing"
+            "quiet_sit" -> "sit" // reuse sit for quiet behavior
+            "idle" -> "idle"
+            "walking" -> "walking"
+            "bounce" -> "bounce"
+            "poke" -> "poke"
+            "jump" -> "jump"
+            else -> null
+        }
+    }
 
     /** Set by the Service's touch handler while the user is dragging. While
      *  true, physics runs in DRAG mode so gravity/integration stop fighting the
@@ -109,6 +149,19 @@ class MascotView(
         // FSM autonomously picks walking.
         if (!prefs.walk && fsm.currentState.id == "walking") {
             fsm.forceState("idle", nowAnimMs)
+        }
+
+        // App awareness: let the reaction engine decide if the mascot should
+        // react to the current screen context. Only fires when in idle/grounded
+        // states and not dragging — reactions shouldn't interrupt active behavior.
+        if (prefs.appAwareness && !dragging && state.grounded) {
+            val reaction = reactionEngine.step(screenContext, nowAnimMs)
+            if (reaction != null && fsm.canAcceptVisualCommand(InterruptPriority.COSMETIC_FEEDBACK)) {
+                val mapped = mapReactionToState(reaction.animation)
+                if (mapped != null) {
+                    fsm.forceState(mapped, nowAnimMs)
+                }
+            }
         }
 
         if (st.id != lastStateId) {

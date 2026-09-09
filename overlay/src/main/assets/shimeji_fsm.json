@@ -158,6 +158,87 @@
       "transitions": [
         { "to": "idle", "guard": "RANDOM_ANYTIME", "cooldownMs": 400, "weight": 1.0 }
       ]
+    },
+    {
+      "id": "excited",
+      "animation": "excited",
+      "frameDurationMs": 100,
+      "frames": ["jump", "bounce-a", "bounce-b", "jump"],
+      "looping": false,
+      "durationMs": 800,
+      "transitions": [
+        { "to": "idle", "guard": "RANDOM_ANYTIME", "cooldownMs": 500, "weight": 1.0 },
+        { "to": "bounce", "guard": "GROUNDED", "cooldownMs": 800, "weight": 0.3 }
+      ]
+    },
+    {
+      "id": "curious",
+      "animation": "curious",
+      "frameDurationMs": 250,
+      "frames": ["look-a", "look-b"],
+      "looping": false,
+      "durationMs": 1500,
+      "transitions": [
+        { "to": "idle", "guard": "GROUNDED", "cooldownMs": 1000, "weight": 1.0 },
+        { "to": "noticing", "guard": "GROUNDED", "cooldownMs": 800, "weight": 0.3 }
+      ]
+    },
+    {
+      "id": "calm_idle",
+      "animation": "calm",
+      "frameDurationMs": 500,
+      "frames": ["sit", "lie"],
+      "looping": true,
+      "transitions": [
+        { "to": "idle", "guard": "GROUNDED", "cooldownMs": 6000, "weight": 0.8 },
+        { "to": "quiet_sit", "guard": "GROUNDED", "cooldownMs": 3000, "weight": 0.4 }
+      ]
+    },
+    {
+      "id": "noticing",
+      "animation": "noticing",
+      "frameDurationMs": 200,
+      "frames": ["look-a", "idle-a"],
+      "looping": false,
+      "durationMs": 1200,
+      "transitions": [
+        { "to": "idle", "guard": "GROUNDED", "cooldownMs": 600, "weight": 1.0 },
+        { "to": "curious", "guard": "GROUNDED", "cooldownMs": 800, "weight": 0.25 }
+      ]
+    },
+    {
+      "id": "watching",
+      "animation": "watching",
+      "frameDurationMs": 350,
+      "frames": ["look-a", "look-b"],
+      "looping": true,
+      "transitions": [
+        { "to": "idle", "guard": "GROUNDED", "cooldownMs": 5000, "weight": 0.7 },
+        { "to": "curious", "guard": "GROUNDED", "cooldownMs": 3000, "weight": 0.3 }
+      ]
+    },
+    {
+      "id": "dancing",
+      "animation": "dancing",
+      "frameDurationMs": 140,
+      "frames": ["walk-a", "walk-b", "idle-a", "idle-b"],
+      "looping": false,
+      "durationMs": 1200,
+      "transitions": [
+        { "to": "idle", "guard": "GROUNDED", "cooldownMs": 400, "weight": 1.0 },
+        { "to": "bounce", "guard": "GROUNDED", "cooldownMs": 600, "weight": 0.3 }
+      ]
+    },
+    {
+      "id": "quiet_sit",
+      "animation": "quiet",
+      "frameDurationMs": 450,
+      "frames": ["sit", "sit"],
+      "looping": true,
+      "transitions": [
+        { "to": "idle", "guard": "GROUNDED", "cooldownMs": 8000, "weight": 0.6 },
+        { "to": "calm_idle", "guard": "GROUNDED", "cooldownMs": 4000, "weight": 0.3 }
+      ]
     }
   ]
 }

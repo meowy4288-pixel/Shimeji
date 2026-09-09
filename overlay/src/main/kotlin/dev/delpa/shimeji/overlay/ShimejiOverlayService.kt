@@ -30,6 +30,7 @@ import dev.delpa.shimeji.core.fsm.ShimejiFSM
 import dev.delpa.shimeji.core.harness.HarnessEngine
 import dev.delpa.shimeji.core.physics.PhysicsBounds
 import dev.delpa.shimeji.core.physics.PhysicsEngine
+import dev.delpa.shimeji.overlay.accessibility.ShimejiAccessibilityService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -270,6 +271,15 @@ class ShimejiOverlayService : Service() {
         }
 
         view.setOnTouchListener(::onMascotTouch)
+
+        // Wire the accessibility service context to the mascot's reaction engine.
+        ShimejiAccessibilityService.onContextChanged = { ctx ->
+            mascotView?.screenContext = ctx
+        }
+        // Feed the current context immediately if the service is already running.
+        if (ShimejiAccessibilityService.isRunning) {
+            mascotView?.screenContext = ShimejiAccessibilityService.currentContext
+        }
 
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         this.scope = scope

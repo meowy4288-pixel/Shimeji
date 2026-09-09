@@ -163,9 +163,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _idleVariety.value = enabled
     }
 
-    fun importCharacter(name: String, uri: Uri) {
+    fun importCharacterZip(name: String, uri: Uri) {
         viewModelScope.launch {
-            val result = charManager.importFromUri(name, uri)
+            val result = charManager.importFromZip(name, uri)
             if (result != null) {
                 _characters.value = charManager.list()
                 _selectedCharacter.value = result
